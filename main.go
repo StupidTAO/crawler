@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/StupidTAO/crawler/collect"
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/unicode"
@@ -20,12 +21,23 @@ var headerRe = regexp.MustCompile(`<div class="small_cardcontent__BTALp"[\s\S]*?
 // tag v0.0.9
 func main() {
 	url := "https://www.thepaper.cn/"
-	body, err := Fetch(url)
+	//body, err := Fetch(url)
 
+	url = "https://book.douban.com/subject/1007305/"
+	var f collect.Fetcher = collect.BrowserFetch{}
+	body, err := f.Get(url)
 	if err != nil {
 		fmt.Println("read content failed:%v", err)
 		return
 	}
+	fmt.Println(string(body))
+	/*
+		var f collect.Fetcher = collect.BaseFetch{}
+		body, err := f.Get(url)
+		if err != nil {
+			fmt.Println("read content failed:%v", err)
+			return
+		}*/
 
 	// 加载HTML文档
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
@@ -38,6 +50,7 @@ func main() {
 		title := s.Text()
 		fmt.Printf("Review %d: %s\n", i, title)
 	})
+
 }
 
 // tag v0.0.4
