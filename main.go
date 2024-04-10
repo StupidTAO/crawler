@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/antchfx/htmlquery"
+	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/unicode"
@@ -17,7 +17,7 @@ import (
 // tag v0.0.5
 var headerRe = regexp.MustCompile(`<div class="small_cardcontent__BTALp"[\s\S]*?<h2>([\s\S]*?)</h2>`)
 
-// tag v0.0.6
+// tag v0.0.9
 func main() {
 	url := "https://www.thepaper.cn/"
 	body, err := Fetch(url)
@@ -26,16 +26,18 @@ func main() {
 		fmt.Println("read content failed:%v", err)
 		return
 	}
-	doc, err := htmlquery.Parse(bytes.NewReader(body))
-	if err != nil {
-		fmt.Println("htmlquery.Parse failed:%v", err)
-	}
-	//Xpath
-	nodes := htmlquery.Find(doc, `//div[@class="small_cardcontent__BTALp"]//h2`)
 
-	for _, node := range nodes {
-		fmt.Println("fetch card ", node.FirstChild.Data)
+	// 加载HTML文档
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
+	if err != nil {
+		fmt.Println("read content failed:%v", err)
 	}
+
+	doc.Find("div.small_cardcontent__BTALp h2").Each(func(i int, s *goquery.Selection) {
+		// 获取匹配标签中的文本
+		title := s.Text()
+		fmt.Printf("Review %d: %s\n", i, title)
+	})
 }
 
 // tag v0.0.4
