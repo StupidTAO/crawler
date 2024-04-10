@@ -9,44 +9,24 @@ import (
 	"golang.org/x/text/transform"
 	"io/ioutil"
 	"net/http"
-	"strings"
+	"regexp"
 )
+
+// tag v0.0.5
+var headerRe = regexp.MustCompile(`<div class="small_cardcontent__BTALp"[\s\S]*?<h2>([\s\S]*?)</h2>`)
 
 func main() {
 	url := "https://www.thepaper.cn/"
-	resp, err := http.Get(url)
-
-	if err != nil {
-		fmt.Println("fetch url error:%v", err)
-		return
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("Error status code:%v", resp.StatusCode)
-		return
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := Fetch(url)
 
 	if err != nil {
 		fmt.Println("read content failed:%v", err)
 		return
 	}
-
-	numLinks := strings.Count(string(body), "<a")
-	fmt.Printf("homepage has %d links!\n", numLinks)
-
-	exist := strings.Contains(string(body), "疫情")
-	fmt.Printf("是否存在疫情:%v\n", exist)
-
-	result, err := Fetch(url)
-	if err != nil {
-		fmt.Println("read content failed:%v", err)
-		return
+	matches := headerRe.FindAllSubmatch(body, -1)
+	for _, m := range matches {
+		fmt.Println("fetch card news:", string(m[1]))
 	}
-	fmt.Println("result :", string(result))
 }
 
 // tag v0.0.4
