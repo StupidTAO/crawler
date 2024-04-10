@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
+	"github.com/antchfx/htmlquery"
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/unicode"
@@ -15,6 +17,7 @@ import (
 // tag v0.0.5
 var headerRe = regexp.MustCompile(`<div class="small_cardcontent__BTALp"[\s\S]*?<h2>([\s\S]*?)</h2>`)
 
+// tag v0.0.6
 func main() {
 	url := "https://www.thepaper.cn/"
 	body, err := Fetch(url)
@@ -23,9 +26,15 @@ func main() {
 		fmt.Println("read content failed:%v", err)
 		return
 	}
-	matches := headerRe.FindAllSubmatch(body, -1)
-	for _, m := range matches {
-		fmt.Println("fetch card news:", string(m[1]))
+	doc, err := htmlquery.Parse(bytes.NewReader(body))
+	if err != nil {
+		fmt.Println("htmlquery.Parse failed:%v", err)
+	}
+	//Xpath
+	nodes := htmlquery.Find(doc, `//div[@class="small_cardcontent__BTALp"]//h2`)
+
+	for _, node := range nodes {
+		fmt.Println("fetch card ", node.FirstChild.Data)
 	}
 }
 
