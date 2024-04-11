@@ -3,6 +3,7 @@ package collect
 import (
 	"bufio"
 	"fmt"
+	"github.com/StupidTAO/crawler/proxy"
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/unicode"
@@ -54,6 +55,7 @@ func DeterminEncoding(r *bufio.Reader) encoding.Encoding {
 
 type BrowserFetch struct {
 	Timeout time.Duration
+	Proxy   proxy.ProxyFunc
 }
 
 // 模拟浏览器访问
@@ -62,6 +64,11 @@ func (b BrowserFetch) Get(url string) ([]byte, error) {
 		Timeout: b.Timeout,
 	}
 
+	if b.Proxy != nil {
+		transport := http.DefaultTransport.(*http.Transport)
+		transport.Proxy = b.Proxy
+		client.Transport = transport
+	}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("get url failed:%v", err)
@@ -69,13 +76,16 @@ func (b BrowserFetch) Get(url string) ([]byte, error) {
 
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36")
 
+	fmt.Println("3333")
 	resp, err := client.Do(req)
 	if err != nil {
+		fmt.Printf("get error: ", err.Error())
 		return nil, err
 	}
 
 	bodyReader := bufio.NewReader(resp.Body)
 	e := DeterminEncoding(bodyReader)
 	utf8Reader := transform.NewReader(bodyReader, e.NewDecoder())
+	fmt.Println("4444")
 	return ioutil.ReadAll(utf8Reader)
 }
