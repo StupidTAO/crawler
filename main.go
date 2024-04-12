@@ -34,7 +34,7 @@ func main() {
 		fmt.Println("get read content failed:%v", err)
 		return
 	}
-	fmt.Println(string(body))
+	//fmt.Println(string(body))
 
 	// 加载HTML文档
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))

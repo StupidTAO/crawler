@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 )
 
-type ProxyFunc func(response *http.Request) (*url.URL, error)
+type ProxyFunc func(*http.Request) (*url.URL, error)
 
 type roundRobinSwitcher struct {
 	proxyURLs []*url.URL

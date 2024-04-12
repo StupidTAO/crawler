@@ -76,7 +76,6 @@ func (b BrowserFetch) Get(url string) ([]byte, error) {
 
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36")
 
-	fmt.Println("3333")
 	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Printf("get error: ", err.Error())
@@ -86,6 +85,6 @@ func (b BrowserFetch) Get(url string) ([]byte, error) {
 	bodyReader := bufio.NewReader(resp.Body)
 	e := DeterminEncoding(bodyReader)
 	utf8Reader := transform.NewReader(bodyReader, e.NewDecoder())
-	fmt.Println("4444")
+
 	return ioutil.ReadAll(utf8Reader)
 }
