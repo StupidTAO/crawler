@@ -2,6 +2,7 @@
 package doubangroup
 
 import (
+	"fmt"
 	"github.com/StupidTAO/crawler/collect"
 	"regexp"
 )
@@ -14,12 +15,15 @@ func ParseURL(contents []byte, req *collect.Request) collect.ParseResult {
 	matches := re.FindAllSubmatch(contents, -1)
 	result := collect.ParseResult{}
 
+	fmt.Println("ParseURL() len(matches) = ", len(matches))
 	for _, m := range matches {
 		u := string(m[1])
 		result.Requests = append(
 			result.Requests, &collect.Request{
+				Method: "GET",
+				Task:   req.Task,
 				Url:    u,
-				Cookie: req.Cookie,
+				Depth:  req.Depth + 1,
 				ParseFunc: func(c []byte, request *collect.Request) collect.ParseResult {
 					return GetContent(c, u)
 				},
@@ -40,6 +44,7 @@ func GetContent(contents []byte, url string) collect.ParseResult {
 		}
 	}
 
+	fmt.Println("GetContent() url = ", url)
 	result := collect.ParseResult{
 		Items: []interface{}{url},
 	}

@@ -1,15 +1,52 @@
 package collect
 
-import "time"
+import (
+	"crypto/md5"
+	"encoding/hex"
+	"errors"
+	"sync"
+	"time"
+)
 
+// 一个任务实例
+type Task struct {
+	Url         string
+	Cookie      string
+	WaitTime    time.Duration
+	Reload      bool
+	MaxDepth    int
+	Visitor     map[string]bool
+	VisitorLock sync.Mutex
+	RootReq     *Request
+	Fetcher     Fetcher
+}
+
+// 单个请求
 type Request struct {
+	unique    string
+	Task      *Task
 	Url       string
-	Cookie    string
-	WaitTime  time.Duration
+	Method    string
+	Depth     int
+	Priority  int
 	ParseFunc func([]byte, *Request) ParseResult
 }
 
 type ParseResult struct {
 	Requests []*Request
 	Items    []interface{}
+}
+
+func (r *Request) Check() error {
+	if r.Depth > r.Task.MaxDepth {
+		return errors.New("Max depth limit reached")
+	}
+	return nil
+}
+
+// 请求的唯一识别码
+func (r *Request) Unique() string {
+	block := md5.Sum([]byte(r.Url + r.Method))
+	//数组转切片
+	return hex.EncodeToString(block[:])
 }
