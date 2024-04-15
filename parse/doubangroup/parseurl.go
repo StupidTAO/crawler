@@ -1,3 +1,4 @@
+// 该模块只是在做链接、以及链接内容的解析；不涉及并发逻辑q
 package doubangroup
 
 import (
