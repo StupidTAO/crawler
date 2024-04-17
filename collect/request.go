@@ -4,32 +4,77 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
+	"regexp"
 	"sync"
 	"time"
 )
 
+type Property struct {
+	Name     string        `json:"name"` //任务名称，应保证唯一性
+	Url      string        `json:"url"`
+	Cookie   string        `json:"cookie"`
+	WaitTime time.Duration `json:"wait_time"`
+	Reload   bool          `json:"reload"`
+	MaxDepth int64         `json:"max_depth"`
+}
+
 // 一个任务实例
 type Task struct {
-	Url         string
-	Cookie      string
-	WaitTime    time.Duration
-	Reload      bool
-	MaxDepth    int
-	Visitor     map[string]bool
+	Property
+	Visited     map[string]bool
 	VisitorLock sync.Mutex
-	RootReq     *Request
 	Fetcher     Fetcher
+	Rule        RuleTree
+}
+
+type Context struct {
+	Body []byte
+	Req  *Request
+}
+
+func (c *Context) ParseJSReg(name string, reg string) ParseResult {
+	re := regexp.MustCompile(reg)
+
+	matches := re.FindAllSubmatch(c.Body, -1)
+	result := ParseResult{}
+
+	for _, m := range matches {
+		u := string(m[1])
+		result.Requests = append(
+			result.Requests, &Request{
+				Method:   "GET",
+				Task:     c.Req.Task,
+				Url:      u,
+				Depth:    c.Req.Depth + 1,
+				RuleName: name,
+			})
+	}
+	return result
+}
+
+func (c *Context) OutputJS(reg string) ParseResult {
+	re := regexp.MustCompile(reg)
+	ok := re.Match(c.Body)
+	if !ok {
+		return ParseResult{
+			Items: []interface{}{},
+		}
+	}
+	result := ParseResult{
+		Items: []interface{}{c.Req.Url},
+	}
+	return result
 }
 
 // 单个请求
 type Request struct {
-	unique    string
-	Task      *Task
-	Url       string
-	Method    string
-	Depth     int
-	Priority  int
-	ParseFunc func([]byte, *Request) ParseResult
+	unique   string
+	Task     *Task
+	Url      string
+	Method   string
+	Depth    int64
+	Priority int64
+	RuleName string
 }
 
 type ParseResult struct {

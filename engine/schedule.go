@@ -1,11 +1,124 @@
 package engine
 
 import (
-	"fmt"
 	"github.com/StupidTAO/crawler/collect"
+	"github.com/StupidTAO/crawler/parse/doubangroup"
+	"github.com/robertkrimen/otto"
 	"go.uber.org/zap"
 	"sync"
 )
+
+func init() {
+	Store.Add(doubangroup.DoubanGroupTask)
+	Store.AddJSTask(doubangroup.DoubanGroupJSTask)
+}
+
+func (c *CrawlerStore) Add(task *collect.Task) {
+	c.hash[task.Name] = task
+	c.list = append(c.list, task)
+}
+
+type mystruct struct {
+	Name string
+	Age  int
+}
+
+// 用于动态规则添加请求。
+func AddJsReqs(jres []map[string]interface{}) []*collect.Request {
+	reqs := make([]*collect.Request, 0)
+
+	for _, jreq := range jres {
+		req := &collect.Request{}
+		u, ok := jreq["Url"].(string)
+		if !ok {
+			return nil
+		}
+		req.Url = u
+		req.RuleName, _ = jreq["RuleName"].(string)
+		req.Method, _ = jreq["Method"].(string)
+		req.Priority, _ = jreq["Priority"].(int64)
+		reqs = append(reqs, req)
+	}
+
+	return reqs
+}
+
+// 用于动态规则添加请求。
+func AddJsReq(jreq map[string]interface{}) []*collect.Request {
+	reqs := make([]*collect.Request, 0)
+	req := &collect.Request{}
+	u, ok := jreq["Url"].(string)
+	if !ok {
+		return nil
+	}
+	req.Url = u
+	req.RuleName, _ = jreq["RuleName"].(string)
+	req.Method, _ = jreq["Method"].(string)
+	req.Priority, _ = jreq["Priority"].(int64)
+	reqs = append(reqs, req)
+	return reqs
+}
+
+func (c *CrawlerStore) AddJSTask(m *collect.TaskModle) {
+	task := &collect.Task{
+		Property: m.Property,
+	}
+
+	task.Rule.Root = func() ([]*collect.Request, error) {
+		vm := otto.New()
+		vm.Set("AddJsReq", AddJsReqs)
+		v, err := vm.Eval(m.Root)
+		if err != nil {
+			return nil, err
+		}
+
+		e, err := v.Export()
+		if err != nil {
+			return nil, err
+		}
+		return e.([]*collect.Request), nil
+	}
+
+	for _, r := range m.Rules {
+		parseFunc := func(parse string) func(ctx *collect.Context) (collect.ParseResult, error) {
+			return func(ctx *collect.Context) (collect.ParseResult, error) {
+				vm := otto.New()
+				vm.Set("ctx", ctx)
+				v, err := vm.Eval(parse)
+				if err != nil {
+					return collect.ParseResult{}, nil
+				}
+				e, err := v.Export()
+				if err != nil {
+					return collect.ParseResult{}, nil
+				}
+				if e == nil {
+					return collect.ParseResult{}, nil
+				}
+				return e.(collect.ParseResult), err
+			}
+		}(r.ParseFunc)
+		if task.Rule.Trunk == nil {
+			task.Rule.Trunk = make(map[string]*collect.Rule, 0)
+		}
+		task.Rule.Trunk[r.Name] = &collect.Rule{
+			parseFunc,
+		}
+		c.hash[task.Name] = task
+		c.list = append(c.list, task)
+	}
+}
+
+// 全局蜘蛛种类实例
+var Store = &CrawlerStore{
+	list: []*collect.Task{},
+	hash: map[string]*collect.Task{},
+}
+
+type CrawlerStore struct {
+	list []*collect.Task
+	hash map[string]*collect.Task
+}
 
 type Crawler struct {
 	out         chan collect.ParseResult
@@ -111,9 +224,17 @@ func (s *Schedule) Schedule() {
 func (e *Crawler) Schedule() {
 	var reqs []*collect.Request
 	for _, seed := range e.Seeds {
-		seed.RootReq.Task = seed
-		seed.RootReq.Url = seed.Url
-		reqs = append(reqs, seed.RootReq)
+		task := Store.hash[seed.Name]
+		task.Fetcher = seed.Fetcher
+		rootreqs, err := task.Rule.Root()
+		if err != nil {
+			e.Logger.Error("get root failed", zap.Error(err))
+			continue
+		}
+		for _, req := range rootreqs {
+			req.Task = task
+		}
+		reqs = append(reqs, rootreqs...)
 	}
 	go e.scheduler.Schedule()
 	go e.scheduler.Push(reqs...)
@@ -122,6 +243,10 @@ func (e *Crawler) Schedule() {
 func (e *Crawler) CreateWork() {
 	for {
 		r := e.scheduler.Pull()
+		if r == nil {
+			e.Logger.Error("create work pull failed")
+			continue
+		}
 		if err := r.Check(); err != nil {
 			e.Logger.Error("check failed", zap.Error(err))
 			continue
@@ -145,13 +270,25 @@ func (e *Crawler) CreateWork() {
 		//	continue
 		//}
 
-		result := r.ParseFunc(body, r)
+		rule := r.Task.Rule.Trunk[r.RuleName]
+		if rule == nil {
+			e.Logger.Error("CreateWork get rule failed!")
+			continue
+		}
+
+		result, err := rule.ParseFunc(&collect.Context{
+			body,
+			r,
+		})
+		if err != nil {
+			e.Logger.Error("ParseFunc failed ", zap.Error(err), zap.String("url", r.Url))
+			continue
+		}
 
 		if len(result.Requests) > 0 {
 			go e.scheduler.Push(result.Requests...)
 		}
 
-		fmt.Println("Crawler-CreateWork()： ", result)
 		e.out <- result
 	}
 }

@@ -32,7 +32,7 @@ func (BaseFetch) Get(request *Request) ([]byte, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("Error status code:%d\n", resp.StatusCode)
+		fmt.Sprintf("Error status code:%d\n", resp.StatusCode)
 		return nil, err
 	}
 	bodyReader := bufio.NewReader(resp.Body)
