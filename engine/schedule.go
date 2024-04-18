@@ -2,7 +2,10 @@ package engine
 
 import (
 	"github.com/StupidTAO/crawler/collect"
+	"github.com/StupidTAO/crawler/collector"
+	"github.com/StupidTAO/crawler/parse/doubanbook"
 	"github.com/StupidTAO/crawler/parse/doubangroup"
+	"github.com/StupidTAO/crawler/parse/doubangroupjs"
 	"github.com/robertkrimen/otto"
 	"go.uber.org/zap"
 	"sync"
@@ -10,7 +13,8 @@ import (
 
 func init() {
 	Store.Add(doubangroup.DoubanGroupTask)
-	Store.AddJSTask(doubangroup.DoubanGroupJSTask)
+	Store.Add(doubanbook.DoubanBookTask)
+	Store.AddJSTask(doubangroupjs.DoubanGroupJSTask)
 }
 
 func (c *CrawlerStore) Add(task *collect.Task) {
@@ -102,7 +106,7 @@ func (c *CrawlerStore) AddJSTask(m *collect.TaskModle) {
 			task.Rule.Trunk = make(map[string]*collect.Rule, 0)
 		}
 		task.Rule.Trunk[r.Name] = &collect.Rule{
-			parseFunc,
+			ParseFunc: parseFunc,
 		}
 		c.hash[task.Name] = task
 		c.list = append(c.list, task)
@@ -113,6 +117,10 @@ func (c *CrawlerStore) AddJSTask(m *collect.TaskModle) {
 var Store = &CrawlerStore{
 	list: []*collect.Task{},
 	hash: map[string]*collect.Task{},
+}
+
+func GetFields(taskName string, ruleName string) []string {
+	return Store.hash[taskName].Rule.Trunk[ruleName].ItemFields
 }
 
 type CrawlerStore struct {
@@ -226,6 +234,7 @@ func (e *Crawler) Schedule() {
 	for _, seed := range e.Seeds {
 		task := Store.hash[seed.Name]
 		task.Fetcher = seed.Fetcher
+		task.Storage = seed.Storage
 		rootreqs, err := task.Rule.Root()
 		if err != nil {
 			e.Logger.Error("get root failed", zap.Error(err))
@@ -298,8 +307,13 @@ func (e *Crawler) HandleResult() {
 		select {
 		case result := <-e.out:
 			for _, item := range result.Items {
-				//todo: sotre
-				e.Logger.Sugar().Info("get result: ", item)
+				switch d := item.(type) {
+				case *collector.DataCell:
+					name := d.GetTaskName()
+					task := Store.hash[name]
+					task.Storage.Save(d)
+					e.Logger.Sugar().Info("get result: ", item)
+				}
 			}
 		}
 	}

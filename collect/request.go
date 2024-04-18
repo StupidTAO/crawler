@@ -4,6 +4,8 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
+	"github.com/StupidTAO/crawler/collector"
+	"go.uber.org/zap"
 	"regexp"
 	"sync"
 	"time"
@@ -24,12 +26,29 @@ type Task struct {
 	Visited     map[string]bool
 	VisitorLock sync.Mutex
 	Fetcher     Fetcher
+	Storage     collector.Storage
 	Rule        RuleTree
+	Logger      *zap.Logger
 }
 
 type Context struct {
 	Body []byte
 	Req  *Request
+}
+
+func (c *Context) GetRule(ruleName string) *Rule {
+	return c.Req.Task.Rule.Trunk[ruleName]
+}
+
+func (c *Context) Output(data interface{}) *collector.DataCell {
+	res := &collector.DataCell{}
+	res.Data = make(map[string]interface{})
+	res.Data["Task"] = c.Req.Task.Name
+	res.Data["Rule"] = c.Req.RuleName
+	res.Data["Data"] = data
+	res.Data["Url"] = c.Req.Url
+	res.Data["Time"] = time.Now().Format("2006-01-02 15:04:05")
+	return res
 }
 
 func (c *Context) ParseJSReg(name string, reg string) ParseResult {
@@ -75,6 +94,7 @@ type Request struct {
 	Depth    int64
 	Priority int64
 	RuleName string
+	TmpData  *Temp
 }
 
 type ParseResult struct {

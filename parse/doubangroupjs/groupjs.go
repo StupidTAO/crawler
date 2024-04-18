@@ -1,4 +1,4 @@
-package doubangroup
+package doubangroupjs
 
 import (
 	"github.com/StupidTAO/crawler/collect"
