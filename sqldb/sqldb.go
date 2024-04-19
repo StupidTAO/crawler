@@ -99,7 +99,6 @@ func (d *Sqldb) Insert(t TableData) error {
 	blank := ",(" + strings.Repeat(",?", len(t.ColumnNames))[1:] + ")"
 	sql += strings.Repeat(blank, t.DataCount)[1:] + `;`
 	d.logger.Debug("insert table", zap.String("sql", sql))
-	fmt.Println("insert() ", t)
 	_, err := d.db.Exec(sql, t.Args...)
 	return err
 }

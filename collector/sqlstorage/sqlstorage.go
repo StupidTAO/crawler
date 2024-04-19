@@ -2,7 +2,6 @@ package sqlstorage
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/StupidTAO/crawler/collector"
 	"github.com/StupidTAO/crawler/engine"
 	"github.com/StupidTAO/crawler/sqldb"
@@ -82,7 +81,7 @@ func getFields(cell *collector.DataCell) []sqldb.Field {
 	columnNames = append(columnNames,
 		sqldb.Field{Title: "Url", Type: "VARCHAR(255)"},
 		sqldb.Field{Title: "Time", Type: "VARCHAR(255)"})
-	fmt.Println("getFields() columnNames: ", columnNames)
+
 	return columnNames
 }
 

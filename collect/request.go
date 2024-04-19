@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/StupidTAO/crawler/collector"
+	"github.com/StupidTAO/crawler/limiter"
 	"go.uber.org/zap"
 	"regexp"
 	"sync"
@@ -29,6 +30,7 @@ type Task struct {
 	Storage     collector.Storage
 	Rule        RuleTree
 	Logger      *zap.Logger
+	Limit       limiter.RateLimiter
 }
 
 type Context struct {
