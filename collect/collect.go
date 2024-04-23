@@ -3,55 +3,40 @@ package collect
 import (
 	"bufio"
 	"fmt"
+	"github.com/StupidTAO/crawler/spider"
+	"io/ioutil"
+	"net/http"
+	"time"
+
+	"github.com/StupidTAO/crawler/extensions"
 	"github.com/StupidTAO/crawler/proxy"
 	"go.uber.org/zap"
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
-	"io/ioutil"
-	"net/http"
-	"time"
 )
 
-type Fetcher interface {
-	Get(req *Request) ([]byte, error)
-}
+type BaseFetch struct{}
 
-type BaseFetch struct {
-}
-
-func (BaseFetch) Get(request *Request) ([]byte, error) {
-	resp, err := http.Get(request.Url)
+func (BaseFetch) Get(req *spider.Request) ([]byte, error) {
+	resp, err := http.Get(req.URL)
 
 	if err != nil {
-		fmt.Println(err)
 		return nil, err
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Sprintf("Error status code:%d\n", resp.StatusCode)
-		return nil, err
+		return nil, fmt.Errorf("error status code:%d", resp.StatusCode)
 	}
+
 	bodyReader := bufio.NewReader(resp.Body)
 	e := DeterminEncoding(bodyReader)
 	utf8Reader := transform.NewReader(bodyReader, e.NewDecoder())
+
 	return ioutil.ReadAll(utf8Reader)
-}
-
-func DeterminEncoding(r *bufio.Reader) encoding.Encoding {
-
-	bytes, err := r.Peek(1024)
-
-	if err != nil {
-		fmt.Printf("fetch error:%v\n", err)
-		return unicode.UTF8
-	}
-
-	e, _, _ := charset.DetermineEncoding(bytes, "")
-	return e
 }
 
 type BrowserFetch struct {
@@ -61,7 +46,7 @@ type BrowserFetch struct {
 }
 
 // 模拟浏览器访问
-func (b BrowserFetch) Get(request *Request) ([]byte, error) {
+func (b BrowserFetch) Get(request *spider.Request) ([]byte, error) {
 	client := &http.Client{
 		Timeout: b.Timeout,
 	}
@@ -71,25 +56,22 @@ func (b BrowserFetch) Get(request *Request) ([]byte, error) {
 		transport.Proxy = b.Proxy
 		client.Transport = transport
 	}
-	req, err := http.NewRequest("GET", request.Url, nil)
+
+	req, err := http.NewRequest("GET", request.URL, nil)
+
 	if err != nil {
-		return nil, fmt.Errorf("get url failed:%v", err)
+		return nil, fmt.Errorf("get url failed:%w", err)
 	}
 
-	//设置cookie
 	if len(request.Task.Cookie) > 0 {
 		req.Header.Set("Cookie", request.Task.Cookie)
 	}
 
-	//模拟浏览器
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36")
+	req.Header.Set("User-Agent", extensions.GenerateRandomUA())
 
 	resp, err := client.Do(req)
 
-	time.Sleep(request.Task.WaitTime)
-
 	if err != nil {
-		b.Logger.Error("get error: ", zap.Error(err))
 		return nil, err
 	}
 
@@ -98,4 +80,18 @@ func (b BrowserFetch) Get(request *Request) ([]byte, error) {
 	utf8Reader := transform.NewReader(bodyReader, e.NewDecoder())
 
 	return ioutil.ReadAll(utf8Reader)
+}
+
+func DeterminEncoding(r *bufio.Reader) encoding.Encoding {
+	bytes, err := r.Peek(1024)
+
+	if err != nil {
+		zap.L().Error("fetch failed", zap.Error(err))
+
+		return unicode.UTF8
+	}
+
+	e, _, _ := charset.DetermineEncoding(bytes, "")
+
+	return e
 }

@@ -2,6 +2,9 @@
 ## explicit; go 1.20
 filippo.io/edwards25519
 filippo.io/edwards25519/field
+# github.com/BurntSushi/toml v0.3.1
+## explicit
+github.com/BurntSushi/toml
 # github.com/Microsoft/go-winio v0.6.0
 ## explicit; go 1.17
 github.com/Microsoft/go-winio
@@ -124,6 +127,9 @@ github.com/go-git/go-git/v5/utils/merkletrie/filesystem
 github.com/go-git/go-git/v5/utils/merkletrie/index
 github.com/go-git/go-git/v5/utils/merkletrie/internal/frame
 github.com/go-git/go-git/v5/utils/merkletrie/noder
+# github.com/go-micro/plugins/v4/config/encoder/toml v1.2.0
+## explicit; go 1.17
+github.com/go-micro/plugins/v4/config/encoder/toml
 # github.com/go-micro/plugins/v4/registry/etcd v1.2.0
 ## explicit; go 1.17
 github.com/go-micro/plugins/v4/registry/etcd

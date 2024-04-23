@@ -2,15 +2,15 @@ package sqlstorage
 
 import (
 	"encoding/json"
-	"github.com/StupidTAO/crawler/collector"
 	"github.com/StupidTAO/crawler/engine"
+	"github.com/StupidTAO/crawler/spider"
 	"github.com/StupidTAO/crawler/sqldb"
 	"go.uber.org/zap"
 )
 
 type SqlStore struct {
-	dataDocker  []*collector.DataCell //分批输出结果缓存
-	columnNames []sqldb.Field         //标题字段
+	dataDocker  []*spider.DataCell //分批输出结果缓存
+	columnNames []sqldb.Field      //标题字段
 	db          sqldb.DBer
 	Table       map[string]struct{}
 	options
@@ -27,7 +27,7 @@ func New(opts ...Option) (*SqlStore, error) {
 	var err error
 	s.db, err = sqldb.New(
 		sqldb.WithLogger(s.logger),
-		sqldb.WithConnUrl(s.sqlUrl),
+		sqldb.WithConnUrl(s.sqlURL),
 	)
 	if err != nil {
 		return nil, err
@@ -36,7 +36,7 @@ func New(opts ...Option) (*SqlStore, error) {
 	return s, nil
 }
 
-func (s *SqlStore) Save(dataCells ...*collector.DataCell) error {
+func (s *SqlStore) Save(dataCells ...*spider.DataCell) error {
 	for _, cell := range dataCells {
 		name := cell.GetTableName()
 		if _, ok := s.Table[name]; !ok {
@@ -66,7 +66,7 @@ func (s *SqlStore) Save(dataCells ...*collector.DataCell) error {
 	return nil
 }
 
-func getFields(cell *collector.DataCell) []sqldb.Field {
+func getFields(cell *spider.DataCell) []sqldb.Field {
 	taskName := cell.Data["Task"].(string)
 	ruleName := cell.Data["Rule"].(string)
 	fields := engine.GetFields(taskName, ruleName)
@@ -89,6 +89,10 @@ func (s *SqlStore) Flush() error {
 	if len(s.dataDocker) == 0 {
 		return nil
 	}
+	defer func() {
+		s.dataDocker = nil
+	}()
+
 	args := make([]interface{}, 0)
 	for _, datacell := range s.dataDocker {
 		ruleName := datacell.Data["Rule"].(string)
@@ -112,7 +116,7 @@ func (s *SqlStore) Flush() error {
 				}
 			}
 		}
-		value = append(value, datacell.Data["Url"].(string), datacell.Data["Time"].(string))
+		value = append(value, datacell.Data["URL"].(string), datacell.Data["Time"].(string))
 		for _, v := range value {
 			args = append(args, v)
 		}
@@ -129,6 +133,6 @@ func (s *SqlStore) Flush() error {
 		return err
 	}
 	//清空dataDocker中的数据
-	s.dataDocker = []*collector.DataCell{}
+	s.dataDocker = []*spider.DataCell{}
 	return nil
 }
