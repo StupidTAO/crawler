@@ -27,7 +27,7 @@ func New(opts ...Option) (*SqlStore, error) {
 	var err error
 	s.db, err = sqldb.New(
 		sqldb.WithLogger(s.logger),
-		sqldb.WithConnUrl(s.sqlURL),
+		sqldb.WithConnURL(s.sqlURL),
 	)
 	if err != nil {
 		return nil, err
