@@ -95,7 +95,7 @@ func (m *Master) Campaign() {
 				m.logger.Info("watch leader change", zap.String("leader:", string(resp.Kvs[0].Value)))
 			}
 		case resp := <-workerNodeChange:
-			m.logger.Info("watch worker chang", zap.Any("worker", resp))
+			m.logger.Info("watch worker chang", zap.Any("worker:", resp))
 			m.updateNodes()
 		case <-time.After(20 * time.Second):
 			rsp, err := e.Leader(context.Background())

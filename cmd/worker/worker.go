@@ -45,6 +45,20 @@ var WorkerCmd = &cobra.Command{
 	},
 }
 
+func init() {
+	WorkerCmd.Flags().StringVar(
+		&workerID, "id", "1", "set master id")
+	WorkerCmd.Flags().StringVar(
+		&HTTPListenAddress, "http", ":8080", "set HTTP listen address")
+
+	WorkerCmd.Flags().StringVar(
+		&GRPCListenAddress, "grpc", ":9090", "set GRPC listen address")
+}
+
+var workerID string
+var HTTPListenAddress string
+var GRPCListenAddress string
+
 func Run() {
 	var (
 		err     error
