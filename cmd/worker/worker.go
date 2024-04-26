@@ -15,6 +15,7 @@ import (
 	"github.com/go-micro/plugins/v4/registry/etcd"
 	"github.com/go-micro/plugins/v4/server/grpc"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/spf13/cobra"
 	"go-micro.dev/v4"
 	"go-micro.dev/v4/client"
 	"go-micro.dev/v4/config"
@@ -32,6 +33,17 @@ import (
 	"net/http"
 	"time"
 )
+
+var ServiceName string = "go.micro.server.worker"
+var WorkerCmd = &cobra.Command{
+	Use:   "worker",
+	Short: "run worker service.",
+	Long:  "run worker service.",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		Run()
+	},
+}
 
 func Run() {
 	var (
