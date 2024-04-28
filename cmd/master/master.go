@@ -6,7 +6,7 @@ import (
 	"github.com/StupidTAO/crawler/cmd/worker"
 	"github.com/StupidTAO/crawler/log"
 	"github.com/StupidTAO/crawler/master"
-	pb "github.com/StupidTAO/crawler/proto/greeter"
+	"github.com/StupidTAO/crawler/proto/crawler"
 	"github.com/StupidTAO/crawler/spider"
 	"github.com/go-micro/plugins/v4/config/encoder/toml"
 	etcdReg "github.com/go-micro/plugins/v4/registry/etcd"
@@ -45,6 +45,9 @@ var MasterCmd = &cobra.Command{
 	Long:  "run master service.",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println("master id = ", masterID)
+		fmt.Println("http address = ", HTTPListenAddress)
+		fmt.Println("grpc address = ", GRPCListenAddress)
 		Run()
 	},
 }
@@ -113,7 +116,7 @@ func Run() {
 	}
 	seeds := worker.ParseTaskConfig(logger, nil, nil, tcfg)
 
-	master.New(
+	m, err := master.New(
 		masterID,
 		master.WithLogger(logger.Named("master")),
 		master.WithGRPCAddress(GRPCListenAddress),
@@ -121,11 +124,16 @@ func Run() {
 		master.WithRegistry(reg),
 		master.WithSeeds(seeds),
 	)
+	if err != nil {
+		logger.Error("init master failed", zap.Error(err))
+		return
+	}
+
 	// start http proxy to GRPC
 	go RunHTTPServer(sconfig)
 
 	// start grpc server
-	RunGRPCServer(logger, reg, sconfig)
+	RunGRPCServer(m, logger, reg, sconfig)
 }
 
 type ServerConfig struct {
@@ -136,7 +144,7 @@ type ServerConfig struct {
 	ClientTimeOut    int
 }
 
-func RunGRPCServer(logger *zap.Logger, reg registry.Registry, cfg ServerConfig) {
+func RunGRPCServer(MasterService *master.Master, logger *zap.Logger, reg registry.Registry, cfg ServerConfig) {
 	service := micro.NewService(
 		micro.Server(gs.NewServer(
 			server.Id(masterID),
@@ -152,27 +160,18 @@ func RunGRPCServer(logger *zap.Logger, reg registry.Registry, cfg ServerConfig) 
 	// 设置micro 客户端默认超时时间为10秒钟
 	if err := service.Client().Init(client.RequestTimeout(time.Duration(cfg.ClientTimeOut) * time.Second)); err != nil {
 		logger.Sugar().Error("micro client init error. ", zap.String("error:", err.Error()))
-
 		return
 	}
 
 	service.Init()
 
-	if err := pb.RegisterGreeterHandler(service.Server(), new(Greeter)); err != nil {
-		logger.Fatal("register handler failed")
+	if err := crawler.RegisterCrawlerMasterHandler(service.Server(), MasterService); err != nil {
+		logger.Fatal("register handler failed", zap.Error(err))
 	}
 
 	if err := service.Run(); err != nil {
-		logger.Fatal("grpc server stop")
+		logger.Fatal("grpc server stop", zap.Error(err))
 	}
-}
-
-type Greeter struct{}
-
-func (g *Greeter) Hello(ctx context.Context, req *pb.Request, rsp *pb.Response) error {
-	rsp.Greeting = "Hello " + req.Name
-
-	return nil
 }
 
 func RunHTTPServer(cfg ServerConfig) {
@@ -186,12 +185,12 @@ func RunHTTPServer(cfg ServerConfig) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
 
-	if err := pb.RegisterGreeterGwFromEndpoint(ctx, mux, GRPCListenAddress, opts); err != nil {
+	if err := crawler.RegisterCrawlerMasterGwFromEndpoint(ctx, mux, GRPCListenAddress, opts); err != nil {
 		zap.L().Fatal("Register backend grpc server endpoint failed")
 	}
 	zap.S().Debugf("start http server listening on %v proxy to grpc server;%v", HTTPListenAddress, GRPCListenAddress)
 	if err := http.ListenAndServe(HTTPListenAddress, mux); err != nil {
-		zap.L().Fatal("http listenAndServe failed")
+		zap.L().Fatal("http listenAndServe failed", zap.Error(err))
 	}
 }
 

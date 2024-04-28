@@ -41,6 +41,9 @@ var WorkerCmd = &cobra.Command{
 	Long:  "run worker service.",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println("work id = ", workerID)
+		fmt.Println("http address = ", HTTPListenAddress)
+		fmt.Println("grpc address = ", GRPCListenAddress)
 		Run()
 	},
 }
@@ -168,9 +171,9 @@ func RunGRPCServer(logger *zap.Logger, cfg ServerConfig) {
 	reg := etcd.NewRegistry(registry.Addrs(cfg.RegistryAddress))
 	service := micro.NewService(
 		micro.Server(grpc.NewServer(
-			server.Id(cfg.ID),
+			server.Id(workerID),
 		)),
-		micro.Address(cfg.GRPCListenAddress),
+		micro.Address(GRPCListenAddress),
 		micro.Registry(reg),
 		micro.RegisterTTL(time.Duration(cfg.RegisterTTL)*time.Second),
 		micro.RegisterInterval(time.Duration(cfg.RegisterInterval)*time.Second),
@@ -215,11 +218,11 @@ func RunHTTPServer(cfg ServerConfig) {
 		grpc2.WithTransportCredentials(insecure.NewCredentials()),
 	}
 
-	if err := greeter.RegisterGreeterGwFromEndpoint(ctx, mux, cfg.GRPCListenAddress, opts); err != nil {
+	if err := greeter.RegisterGreeterGwFromEndpoint(ctx, mux, GRPCListenAddress, opts); err != nil {
 		zap.L().Fatal("Register backend grpc server endpoint failed")
 	}
-	zap.S().Debugf("start http server listening on %v proxy to grpc server;%v", cfg.HTTPListenAddress, cfg.GRPCListenAddress)
-	if err := http.ListenAndServe(cfg.HTTPListenAddress, mux); err != nil {
+	zap.S().Debugf("start http server listening on %v proxy to grpc server;%v", HTTPListenAddress, cfg.GRPCListenAddress)
+	if err := http.ListenAndServe(HTTPListenAddress, mux); err != nil {
 		zap.L().Fatal("http listenAndServe failed")
 	}
 }
