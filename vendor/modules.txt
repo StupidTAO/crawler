@@ -51,9 +51,6 @@ github.com/cpuguy83/go-md2man/v2/md2man
 # github.com/davecgh/go-spew v1.1.1
 ## explicit
 github.com/davecgh/go-spew/spew
-# github.com/dreamerjackson/crawler v0.4.3
-## explicit; go 1.18
-github.com/dreamerjackson/crawler/proto/crawler
 # github.com/emirpasic/gods v1.12.0
 ## explicit
 github.com/emirpasic/gods/containers
@@ -133,6 +130,9 @@ github.com/go-git/go-git/v5/utils/merkletrie/filesystem
 github.com/go-git/go-git/v5/utils/merkletrie/index
 github.com/go-git/go-git/v5/utils/merkletrie/internal/frame
 github.com/go-git/go-git/v5/utils/merkletrie/noder
+# github.com/go-micro/plugins/v4/client/grpc v1.1.0
+## explicit; go 1.17
+github.com/go-micro/plugins/v4/client/grpc
 # github.com/go-micro/plugins/v4/config/encoder/toml v1.2.0
 ## explicit; go 1.17
 github.com/go-micro/plugins/v4/config/encoder/toml

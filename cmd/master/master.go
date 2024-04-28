@@ -8,6 +8,7 @@ import (
 	"github.com/StupidTAO/crawler/master"
 	"github.com/StupidTAO/crawler/proto/crawler"
 	"github.com/StupidTAO/crawler/spider"
+	grpccli "github.com/go-micro/plugins/v4/client/grpc"
 	"github.com/go-micro/plugins/v4/config/encoder/toml"
 	etcdReg "github.com/go-micro/plugins/v4/registry/etcd"
 	gs "github.com/go-micro/plugins/v4/server/grpc"
@@ -165,7 +166,11 @@ func RunGRPCServer(MasterService *master.Master, logger *zap.Logger, reg registr
 		micro.RegisterInterval(time.Duration(cfg.RegisterInterval)*time.Second),
 		micro.WrapHandler(logWrapper(logger)),
 		micro.Name(cfg.Name),
+		micro.Client(grpccli.NewClient()),
 	)
+
+	cli := crawler.NewCrawlerMasterService(cfg.Name, service.Client())
+	MasterService.SetForwardCli(cli)
 
 	// 设置micro 客户端默认超时时间为10秒钟
 	if err := service.Client().Init(client.RequestTimeout(time.Duration(cfg.ClientTimeOut) * time.Second)); err != nil {

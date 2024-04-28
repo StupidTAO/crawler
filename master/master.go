@@ -9,6 +9,7 @@ import (
 	proto "github.com/StupidTAO/crawler/proto/crawler"
 	"github.com/bwmarrin/snowflake"
 	"github.com/golang/protobuf/ptypes/empty"
+	"go-micro.dev/v4/client"
 	"go-micro.dev/v4/registry"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
@@ -45,13 +46,14 @@ type ResourceSpec struct {
 }
 
 type Master struct {
-	ID        string
-	ready     int32
-	leaderID  string
-	workNodes map[string]*NodeSpec
-	resources map[string]*ResourceSpec
-	IDGen     *snowflake.Node
-	etcdCli   *clientv3.Client
+	ID         string
+	ready      int32
+	leaderID   string
+	workNodes  map[string]*NodeSpec
+	resources  map[string]*ResourceSpec
+	IDGen      *snowflake.Node
+	etcdCli    *clientv3.Client
+	forwardCli proto.CrawlerMasterService
 
 	options
 }
@@ -103,6 +105,10 @@ func genMasterID(id string, ipv4 string, GRPCAddress string) string {
 	return "master" + id + "-" + ipv4 + GRPCAddress
 }
 
+func (m *Master) SetForwardCli(forwardCli proto.CrawlerMasterService) {
+	m.forwardCli = forwardCli
+}
+
 func (m *Master) IsLeader() bool {
 	return atomic.LoadInt32(&m.ready) != 0
 }
@@ -123,6 +129,7 @@ func (m *Master) Campaign() {
 	select {
 	case resp := <-leaderChange:
 		m.logger.Info("watch leader change", zap.String("leader:", string(resp.Kvs[0].Value)))
+		m.leaderID = string(resp.Kvs[0].Value)
 	}
 	workerNodeChange := m.WatchWorker()
 
@@ -145,6 +152,11 @@ func (m *Master) Campaign() {
 		case resp := <-leaderChange:
 			if len(resp.Kvs) > 0 {
 				m.logger.Info("watch leader change", zap.String("leader:", string(resp.Kvs[0].Value)))
+				m.leaderID = string(resp.Kvs[0].Value)
+				if m.ID != string(resp.Kvs[0].Value) {
+					//当前已不再是leader
+					atomic.StoreInt32(&m.ready, 0)
+				}
 			}
 		case resp := <-workerNodeChange:
 			m.logger.Info("watch worker chang", zap.Any("worker:", resp))
@@ -163,6 +175,7 @@ func (m *Master) Campaign() {
 			}
 			if rsp != nil && len(rsp.Kvs) > 0 {
 				m.logger.Debug("get Leader", zap.String("value", string(rsp.Kvs[0].Value)))
+				m.leaderID = string(rsp.Kvs[0].Value)
 				if m.IsLeader() && m.ID != string(rsp.Kvs[0].Value) {
 					//当前已不再是leader
 					atomic.StoreInt32(&m.ready, 0)
@@ -231,12 +244,28 @@ func (m *Master) updateWorkNodes() {
 }
 
 func (m *Master) AddResource(ctx context.Context, req *proto.ResourceSpec, resp *proto.NodeSpec) error {
+	if !m.IsLeader() && m.leaderID != "" && m.leaderID != m.ID {
+		addr := getLeaderAddress(m.leaderID)
+		nodeSpec, err := m.forwardCli.AddResource(ctx, req, client.WithAddress(addr))
+		resp.Id = nodeSpec.Id
+		resp.Address = nodeSpec.Address
+		return err
+	}
+
 	nodeSpec, err := m.addResources(&ResourceSpec{Name: req.Name})
 	if nodeSpec != nil {
 		resp.Id = nodeSpec.Node.Id
 		resp.Address = nodeSpec.Node.Address
 	}
 	return err
+}
+
+func getLeaderAddress(address string) string {
+	s := strings.Split(address, "-")
+	if len(s) < 2 {
+		return ""
+	}
+	return s[1]
 }
 
 func (m *Master) AddResources(rs []*ResourceSpec) {
