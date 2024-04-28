@@ -3,6 +3,7 @@ package doubanbook
 import (
 	"errors"
 	"github.com/StupidTAO/crawler/spider"
+	"go.uber.org/zap"
 	"regexp"
 	"strconv"
 )
@@ -89,6 +90,8 @@ func ParseBookList(ctx *spider.Context) (spider.ParseResult, error) {
 	if len(result.Requests) == 0 {
 		return result, errors.New("matched content is zero!")
 	}
+
+	zap.S().Debugln("parse book list,count:", len(result.Requests), "url:", ctx.Req.URL)
 
 	return result, nil
 }
