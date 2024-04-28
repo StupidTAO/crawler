@@ -7,10 +7,10 @@ CHANNEL := $(shell git rev-parse --abbrev-ref HEAD)
 CHANNEL_BUILD = $(CHANNEL)-$(shell git rev-parse --short=7 HEAD)
 project=github.com/StupidTAO/crawler
 
-LDFLAGS = -X "github.com/dreamerjackson/crawler/version.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
-LDFLAGS += -X "github.com/dreamerjackson/crawler/version.GitHash=$(shell git rev-parse HEAD)"
-LDFLAGS += -X "github.com/dreamerjackson/crawler/version.GitBranch=$(shell git rev-parse --abbrev-ref HEAD)"
-LDFLAGS += -X "github.com/dreamerjackson/crawler/version.Version=${VERSION}"
+LDFLAGS = -X "github.com/StupidTAO/crawler/version.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
+LDFLAGS += -X "github.com/StupidTAO/crawler/version.GitHash=$(shell git rev-parse HEAD)"
+LDFLAGS += -X "github.com/StupidTAO/crawler/version.GitBranch=$(shell git rev-parse --abbrev-ref HEAD)"
+LDFLAGS += -X "github.com/StupidTAO/crawler/version.Version=${VERSION}"
 
 ifeq ($(gorace), 1)
 	BUILD_FLAGS=-race

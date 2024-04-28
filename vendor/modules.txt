@@ -34,8 +34,6 @@ github.com/acomagu/bufpipe
 # github.com/bitly/go-simplejson v0.5.0
 ## explicit
 github.com/bitly/go-simplejson
-# github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869
-## explicit
 # github.com/bwmarrin/snowflake v0.3.0
 ## explicit
 github.com/bwmarrin/snowflake
@@ -256,8 +254,8 @@ github.com/urfave/cli/v2
 # github.com/xanzy/ssh-agent v0.3.0
 ## explicit
 github.com/xanzy/ssh-agent
-# go-micro.dev/v4 v4.10.2
-## explicit; go 1.18
+# go-micro.dev/v4 v4.9.0
+## explicit; go 1.17
 go-micro.dev/v4
 go-micro.dev/v4/api
 go-micro.dev/v4/api/handler
@@ -312,7 +310,6 @@ go-micro.dev/v4/selector
 go-micro.dev/v4/server
 go-micro.dev/v4/store
 go-micro.dev/v4/transport
-go-micro.dev/v4/transport/headers
 go-micro.dev/v4/util/addr
 go-micro.dev/v4/util/backoff
 go-micro.dev/v4/util/buf

@@ -1,7 +1,6 @@
 # Develop tools
 /.vscode/
 /.idea/
-/.trunk
 
 # Binaries for programs and plugins
 *.exe
@@ -35,7 +34,3 @@ _cgo_export.*
 *~
 *.swp
 *.swo
-
-# go work files
-go.work
-go.work.sum

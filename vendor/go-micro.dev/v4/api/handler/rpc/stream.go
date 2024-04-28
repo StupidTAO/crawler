@@ -12,41 +12,41 @@ import (
 	"github.com/gobwas/httphead"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
+
 	"go-micro.dev/v4/api/router"
 	"go-micro.dev/v4/client"
 	raw "go-micro.dev/v4/codec/bytes"
 	"go-micro.dev/v4/selector"
 )
 
-// serveWebsocket will stream rpc back over websockets assuming json.
+// serveWebsocket will stream rpc back over websockets assuming json
 func serveWebsocket(ctx context.Context, w http.ResponseWriter, r *http.Request, service *router.Route, c client.Client) (err error) {
-	var opCode ws.OpCode
+	var op ws.OpCode
 
-	myCt := r.Header.Get("Content-Type")
+	ct := r.Header.Get("Content-Type")
 	// Strip charset from Content-Type (like `application/json; charset=UTF-8`)
-	if idx := strings.IndexRune(myCt, ';'); idx >= 0 {
-		myCt = myCt[:idx]
+	if idx := strings.IndexRune(ct, ';'); idx >= 0 {
+		ct = ct[:idx]
 	}
 
 	// check proto from request
-	switch myCt {
+	switch ct {
 	case "application/json":
-		opCode = ws.OpText
+		op = ws.OpText
 	default:
-		opCode = ws.OpBinary
+		op = ws.OpBinary
 	}
 
 	hdr := make(http.Header)
-
 	if proto, ok := r.Header["Sec-Websocket-Protocol"]; ok {
 		for _, p := range proto {
-			if p == "binary" {
+			switch p {
+			case "binary":
 				hdr["Sec-WebSocket-Protocol"] = []string{"binary"}
-				opCode = ws.OpBinary
+				op = ws.OpBinary
 			}
 		}
 	}
-
 	payload, err := requestPayload(r)
 	if err != nil {
 		return
@@ -67,7 +67,7 @@ func serveWebsocket(ctx context.Context, w http.ResponseWriter, r *http.Request,
 		Header: hdr,
 	}
 
-	conn, uRw, _, err := upgrader.Upgrade(r, w)
+	conn, rw, _, err := upgrader.Upgrade(r, w)
 	if err != nil {
 		return
 	}
@@ -79,9 +79,8 @@ func serveWebsocket(ctx context.Context, w http.ResponseWriter, r *http.Request,
 	}()
 
 	var request interface{}
-
 	if !bytes.Equal(payload, []byte(`{}`)) {
-		switch myCt {
+		switch ct {
 		case "application/json", "":
 			m := json.RawMessage(payload)
 			request = &m
@@ -91,25 +90,20 @@ func serveWebsocket(ctx context.Context, w http.ResponseWriter, r *http.Request,
 	}
 
 	// we always need to set content type for message
-	if myCt == "" {
-		myCt = "application/json"
+	if ct == "" {
+		ct = "application/json"
 	}
-
 	req := c.NewRequest(
 		service.Service,
 		service.Endpoint.Name,
 		request,
-		client.WithContentType(myCt),
+		client.WithContentType(ct),
 		client.StreamingRequest(),
 	)
 
-	cCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	so := selector.WithStrategy(strategy(service.Versions))
-
 	// create a new stream
-	stream, err := c.Stream(cCtx, req, client.WithSelectOption(so))
+	stream, err := c.Stream(ctx, req, client.WithSelectOption(so))
 	if err != nil {
 		return
 	}
@@ -121,7 +115,7 @@ func serveWebsocket(ctx context.Context, w http.ResponseWriter, r *http.Request,
 	}
 
 	go func() {
-		if wErr := writeLoop(uRw, stream); wErr != nil && err == nil {
+		if wErr := writeLoop(rw, stream); wErr != nil && err == nil {
 			err = wErr
 		}
 	}()
@@ -143,23 +137,21 @@ func serveWebsocket(ctx context.Context, w http.ResponseWriter, r *http.Request,
 				if strings.Contains(err.Error(), "context canceled") {
 					return nil
 				}
-
 				return err
 			}
 
 			// write the response
-			if err = wsutil.WriteServerMessage(uRw, opCode, buf); err != nil {
+			if err = wsutil.WriteServerMessage(rw, op, buf); err != nil {
 				return err
 			}
-
-			if err = uRw.Flush(); err != nil {
+			if err = rw.Flush(); err != nil {
 				return err
 			}
 		}
 	}
 }
 
-// writeLoop.
+// writeLoop
 func writeLoop(rw io.ReadWriter, stream client.Stream) error {
 	// close stream when done
 	defer stream.Close()
@@ -179,12 +171,10 @@ func writeLoop(rw io.ReadWriter, stream client.Stream) error {
 					case ws.StatusNormalClosure, ws.StatusNoStatusRcvd:
 						// this happens when user close ws connection, or we don't get any status
 						return nil
-					default:
-						return err
 					}
 				}
+				return err
 			}
-
 			switch op {
 			default:
 				// not relevant
@@ -221,7 +211,6 @@ func isStream(r *http.Request, srv *router.Route) bool {
 			}
 		}
 	}
-
 	return false
 }
 
@@ -233,7 +222,6 @@ func isWebSocket(r *http.Request) bool {
 				return true
 			}
 		}
-
 		return false
 	}
 

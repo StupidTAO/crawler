@@ -29,7 +29,7 @@ import (
 type Cmd interface {
 	// The cli app within this cmd
 	App() *cli.App
-	// Adds options, parses flags and initialize
+	// Adds options, parses flags and initialise
 	// exits on error
 	Init(opts ...Option) error
 	// Options set within this command

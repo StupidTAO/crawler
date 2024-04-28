@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"regexp"
 	"time"
 )
@@ -81,6 +82,9 @@ type Request struct {
 }
 
 func (r *Request) Fetch() ([]byte, error) {
+	fmt.Println("Fetch() before, r.Task.Name = ", r.Task.Name)
+	fmt.Println("Fetch() before, r.Task.Limit = ", r.Task.Limit)
+	fmt.Println("Fetch() before,  r.Task.Fetcher = ", r.Task.Fetcher)
 	if err := r.Task.Limit.Wait(context.Background()); err != nil {
 		return nil, err
 	}

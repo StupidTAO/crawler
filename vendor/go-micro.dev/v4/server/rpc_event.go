@@ -3,10 +3,9 @@ package server
 import (
 	"go-micro.dev/v4/broker"
 	"go-micro.dev/v4/transport"
-	"go-micro.dev/v4/transport/headers"
 )
 
-// event is a broker event we handle on the server transport.
+// event is a broker event we handle on the server transport
 type event struct {
 	err     error
 	message *broker.Message
@@ -26,7 +25,7 @@ func (e *event) Error() error {
 }
 
 func (e *event) Topic() string {
-	return e.message.Header[headers.Message]
+	return e.message.Header["Micro-Topic"]
 }
 
 func newEvent(msg transport.Message) *event {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	log "go-micro.dev/v4/logger"
 	maddr "go-micro.dev/v4/util/addr"
 	mnet "go-micro.dev/v4/util/net"
@@ -16,26 +17,25 @@ import (
 type memoryBroker struct {
 	opts *Options
 
-	Subscribers map[string][]*memorySubscriber
-
 	addr string
 	sync.RWMutex
-	connected bool
+	connected   bool
+	Subscribers map[string][]*memorySubscriber
 }
 
 type memoryEvent struct {
-	err     error
-	message interface{}
 	opts    *Options
 	topic   string
+	err     error
+	message interface{}
 }
 
 type memorySubscriber struct {
-	opts    SubscribeOptions
-	exit    chan bool
-	handler Handler
 	id      string
 	topic   string
+	exit    chan bool
+	handler Handler
+	opts    SubscribeOptions
 }
 
 func (m *memoryBroker) Options() Options {

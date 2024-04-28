@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/StupidTAO/crawler/cmd/worker"
 	proto "github.com/StupidTAO/crawler/proto/crawler"
 	"github.com/bwmarrin/snowflake"
 	"github.com/golang/protobuf/ptypes/empty"
@@ -18,12 +17,17 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
 const (
 	RESOURCEPATH = "/resource"
+	ADDRESOURCE  = iota
+	DELETERESOURCE
+
+	ServiceName = "go.micro.server.worker"
 )
 
 const (
@@ -54,6 +58,7 @@ type Master struct {
 	IDGen      *snowflake.Node
 	etcdCli    *clientv3.Client
 	forwardCli proto.CrawlerMasterService
+	rlock      sync.Mutex
 
 	options
 }
@@ -96,7 +101,6 @@ func New(id string, opts ...Option) (*Master, error) {
 	m.updateWorkNodes()
 	m.AddSeed()
 	go m.Campaign()
-	go m.HandleMsg()
 
 	return m, nil
 }
@@ -192,7 +196,7 @@ func (m *Master) elect(e *concurrency.Election, ch chan error) {
 }
 
 func (m *Master) WatchWorker() chan *registry.Result {
-	watch, err := m.registry.Watch(registry.WatchService(worker.ServiceName))
+	watch, err := m.registry.Watch(registry.WatchService(ServiceName))
 	if err != nil {
 		panic(err)
 	}
@@ -222,12 +226,14 @@ func (m *Master) BecomeLeader() error {
 }
 
 func (m *Master) updateWorkNodes() {
-	services, err := m.registry.GetService(worker.ServiceName)
+	services, err := m.registry.GetService(ServiceName)
 	if err != nil {
 		m.logger.Error("get service", zap.Error(err))
 		return
 	}
 
+	m.rlock.Lock()
+	defer m.rlock.Unlock()
 	nodes := make(map[string]*NodeSpec)
 	if len(services) > 0 {
 		for _, spec := range services[0].Nodes {
@@ -252,6 +258,9 @@ func (m *Master) AddResource(ctx context.Context, req *proto.ResourceSpec, resp 
 		return err
 	}
 
+	m.rlock.Lock()
+	defer m.rlock.Unlock()
+	m.logger.Info("AddResource() ", zap.String("ResourceSpec name", req.Name))
 	nodeSpec, err := m.addResources(&ResourceSpec{Name: req.Name})
 	if nodeSpec != nil {
 		resp.Id = nodeSpec.Node.Id
@@ -266,12 +275,6 @@ func getLeaderAddress(address string) string {
 		return ""
 	}
 	return s[1]
-}
-
-func (m *Master) AddResources(rs []*ResourceSpec) {
-	for _, r := range rs {
-		m.addResources(r)
-	}
 }
 
 func (m *Master) addResources(r *ResourceSpec) (*NodeSpec, error) {
@@ -291,7 +294,7 @@ func (m *Master) addResources(r *ResourceSpec) (*NodeSpec, error) {
 	r.CreationTime = time.Now().UnixNano()
 	m.logger.Debug("add resource", zap.Any("specs", r))
 
-	_, err = m.etcdCli.Put(context.Background(), getResourcePath(r.Name), encode(r))
+	_, err = m.etcdCli.Put(context.Background(), getResourcePath(r.Name), Encode(r))
 	if err != nil {
 		m.logger.Error("put etcd failed", zap.Error(err))
 		return nil, err
@@ -301,19 +304,6 @@ func (m *Master) addResources(r *ResourceSpec) (*NodeSpec, error) {
 	m.resources[r.Name] = r
 	ns.Payload++
 	return ns, nil
-}
-
-func (m *Master) HandleMsg() {
-	msgCh := make(chan *Message)
-
-	select {
-	case msg := <-msgCh:
-		switch msg.Cmd {
-		case MSGADD:
-			m.AddResources(msg.Specs)
-		}
-
-	}
 }
 
 func (m *Master) Assign(r *ResourceSpec) (*NodeSpec, error) {
@@ -351,7 +341,9 @@ func (m *Master) AddSeed() {
 		}
 	}
 
-	m.AddResources(rs)
+	for _, r := range rs {
+		m.addResources(r)
+	}
 }
 
 func (m *Master) loadResource() error {
@@ -362,12 +354,15 @@ func (m *Master) loadResource() error {
 
 	resources := make(map[string]*ResourceSpec)
 	for _, kv := range resp.Kvs {
-		r, err := decode(kv.Value)
+		r, err := Decode(kv.Value)
 		if err == nil && r != nil {
 			resources[r.Name] = r
 		}
 	}
 	m.logger.Info("leader init load resource", zap.Int("lenth", len(resources)))
+	m.logger.Info("leader init load resource", zap.Any("resources", resources))
+	m.rlock.Lock()
+	defer m.rlock.Unlock()
 	m.resources = resources
 
 	for _, r := range m.resources {
@@ -385,6 +380,15 @@ func (m *Master) loadResource() error {
 }
 
 func (m *Master) DeleteResource(ctx context.Context, spec *proto.ResourceSpec, empty *empty.Empty) error {
+	if !m.IsLeader() && m.leaderID != "" && m.leaderID != m.ID {
+		addr := getLeaderAddress(m.leaderID)
+		_, err := m.forwardCli.DeleteResource(ctx, spec, client.WithAddress(addr))
+		return err
+	}
+
+	m.rlock.Lock()
+	defer m.rlock.Unlock()
+
 	r, ok := m.resources[spec.Name]
 	if !ok {
 		return errors.New("no such task")
@@ -393,6 +397,7 @@ func (m *Master) DeleteResource(ctx context.Context, spec *proto.ResourceSpec, e
 	if _, err := m.etcdCli.Delete(context.Background(), getResourcePath(spec.Name)); err != nil {
 		return err
 	}
+	delete(m.resources, spec.Name)
 
 	if r.AssignedNode != "" {
 		nodeID, err := getNodeID(r.AssignedNode)
@@ -410,6 +415,9 @@ func (m *Master) DeleteResource(ctx context.Context, spec *proto.ResourceSpec, e
 func (m *Master) reAssign() {
 	rs := make([]*ResourceSpec, 0, len(m.resources))
 
+	m.rlock.Lock()
+	defer m.rlock.Unlock()
+
 	for _, r := range m.resources {
 		if r.AssignedNode == "" {
 			rs = append(rs, r)
@@ -426,7 +434,10 @@ func (m *Master) reAssign() {
 			rs = append(rs, r)
 		}
 	}
-	m.AddResources(rs)
+
+	for _, r := range rs {
+		m.addResources(r)
+	}
 }
 
 func workNodeDiff(old map[string]*NodeSpec, new map[string]*NodeSpec) ([]string, []string, []string) {
@@ -476,12 +487,12 @@ func getResourcePath(name string) string {
 	return fmt.Sprintf("%s/%s", RESOURCEPATH, name)
 }
 
-func encode(s *ResourceSpec) string {
+func Encode(s *ResourceSpec) string {
 	b, _ := json.Marshal(s)
 	return string(b)
 }
 
-func decode(ds []byte) (*ResourceSpec, error) {
+func Decode(ds []byte) (*ResourceSpec, error) {
 	var s ResourceSpec
 	//todo:
 	err := json.Unmarshal(ds, &s)

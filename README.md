@@ -49,7 +49,8 @@ mkdir -p /tmp/etcd-data.tmp && \
   --log-outputs stderr
 ```
 
-bug
+bug:
+1.
 ```
 go: encryptClient/proto imports
         go-micro.dev/v4/api: go-micro.dev/v4/api@v1.18.0: parsing go.mod:
@@ -60,3 +61,13 @@ go: encryptClient/proto imports
 ```
 go get go-micro.dev/v4
 ```
+2.
+```
+crawler.pb.gw.go有问题
+错误表现是调用接口时，name为空
+```
+解决办法：
+```
+需要拷贝教程里的代码
+```
+

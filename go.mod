@@ -14,7 +14,7 @@ require (
 	github.com/robertkrimen/otto v0.4.0
 	github.com/spf13/cobra v1.6.1
 	github.com/stretchr/testify v1.8.1
-	go-micro.dev/v4 v4.10.2
+	go-micro.dev/v4 v4.9.0
 	go.etcd.io/etcd/client/v3 v3.5.2
 	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.24.0
@@ -33,7 +33,6 @@ require (
 	github.com/ProtonMail/go-crypto v0.0.0-20210428141323-04723f9f07d7 // indirect
 	github.com/acomagu/bufpipe v1.0.3 // indirect
 	github.com/bitly/go-simplejson v0.5.0 // indirect
-	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 // indirect
 	github.com/coreos/go-semver v0.3.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.3.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect

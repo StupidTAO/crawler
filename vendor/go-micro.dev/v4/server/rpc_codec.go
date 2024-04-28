@@ -6,7 +6,6 @@ import (
 
 	"github.com/oxtoacart/bpool"
 	"github.com/pkg/errors"
-
 	"go-micro.dev/v4/codec"
 	raw "go-micro.dev/v4/codec/bytes"
 	"go-micro.dev/v4/codec/grpc"
@@ -15,31 +14,28 @@ import (
 	"go-micro.dev/v4/codec/proto"
 	"go-micro.dev/v4/codec/protorpc"
 	"go-micro.dev/v4/transport"
-	"go-micro.dev/v4/transport/headers"
 )
 
 type rpcCodec struct {
-	socket transport.Socket
-	codec  codec.Codec
+	socket   transport.Socket
+	codec    codec.Codec
+	protocol string
 
 	req *transport.Message
 	buf *readWriteCloser
 
-	first    chan bool
-	protocol string
-
 	// check if we're the first
 	sync.RWMutex
+	first chan bool
 }
 
 type readWriteCloser struct {
+	sync.RWMutex
 	wbuf *bytes.Buffer
 	rbuf *bytes.Buffer
-	sync.RWMutex
 }
 
 var (
-	// DefaultContentType is the default codec content type.
 	DefaultContentType = "application/protobuf"
 
 	DefaultCodecs = map[string]codec.NewCodec{
@@ -53,7 +49,7 @@ var (
 		"application/octet-stream": raw.NewCodec,
 	}
 
-	// TODO: remove legacy codec list.
+	// TODO: remove legacy codec list
 	defaultCodecs = map[string]codec.NewCodec{
 		"application/json":         jsonrpc.NewCodec,
 		"application/json-rpc":     jsonrpc.NewCodec,
@@ -62,21 +58,19 @@ var (
 		"application/octet-stream": protorpc.NewCodec,
 	}
 
-	// the local buffer pool.
+	// the local buffer pool
 	bufferPool = bpool.NewSizedBufferPool(32, 1)
 )
 
 func (rwc *readWriteCloser) Read(p []byte) (n int, err error) {
 	rwc.RLock()
 	defer rwc.RUnlock()
-
 	return rwc.rbuf.Read(p)
 }
 
 func (rwc *readWriteCloser) Write(p []byte) (n int, err error) {
 	rwc.Lock()
 	defer rwc.Unlock()
-
 	return rwc.wbuf.Write(p)
 }
 
@@ -88,7 +82,6 @@ func getHeader(hdr string, md map[string]string) string {
 	if hd := md[hdr]; len(hd) > 0 {
 		return hd
 	}
-
 	return md["X-"+hdr]
 }
 
@@ -97,15 +90,14 @@ func getHeaders(m *codec.Message) {
 		if len(v) > 0 {
 			return v
 		}
-
 		return m.Header[hdr]
 	}
 
-	m.Id = set(m.Id, headers.ID)
-	m.Error = set(m.Error, headers.Error)
-	m.Endpoint = set(m.Endpoint, headers.Endpoint)
-	m.Method = set(m.Method, headers.Method)
-	m.Target = set(m.Target, headers.Request)
+	m.Id = set(m.Id, "Micro-Id")
+	m.Error = set(m.Error, "Micro-Error")
+	m.Endpoint = set(m.Endpoint, "Micro-Endpoint")
+	m.Method = set(m.Method, "Micro-Method")
+	m.Target = set(m.Target, "Micro-Service")
 
 	// TODO: remove this cruft
 	if len(m.Endpoint) == 0 {
@@ -118,27 +110,26 @@ func setHeaders(m, r *codec.Message) {
 		if len(v) == 0 {
 			return
 		}
-
 		m.Header[hdr] = v
 		m.Header["X-"+hdr] = v
 	}
 
 	// set headers
-	set(headers.ID, r.Id)
-	set(headers.Request, r.Target)
-	set(headers.Method, r.Method)
-	set(headers.Endpoint, r.Endpoint)
-	set(headers.Error, r.Error)
+	set("Micro-Id", r.Id)
+	set("Micro-Service", r.Target)
+	set("Micro-Method", r.Method)
+	set("Micro-Endpoint", r.Endpoint)
+	set("Micro-Error", r.Error)
 }
 
-// setupProtocol sets up the old protocol.
+// setupProtocol sets up the old protocol
 func setupProtocol(msg *transport.Message) codec.NewCodec {
-	service := getHeader(headers.Request, msg.Header)
-	method := getHeader(headers.Method, msg.Header)
-	endpoint := getHeader(headers.Endpoint, msg.Header)
-	protocol := getHeader(headers.Protocol, msg.Header)
-	target := getHeader(headers.Target, msg.Header)
-	topic := getHeader(headers.Message, msg.Header)
+	service := getHeader("Micro-Service", msg.Header)
+	method := getHeader("Micro-Method", msg.Header)
+	endpoint := getHeader("Micro-Endpoint", msg.Header)
+	protocol := getHeader("Micro-Protocol", msg.Header)
+	target := getHeader("Micro-Target", msg.Header)
+	topic := getHeader("Micro-Topic", msg.Header)
 
 	// if the protocol exists (mucp) do nothing
 	if len(protocol) > 0 {
@@ -162,18 +153,18 @@ func setupProtocol(msg *transport.Message) codec.NewCodec {
 
 	// no method then set to endpoint
 	if len(method) == 0 {
-		msg.Header[headers.Method] = endpoint
+		msg.Header["Micro-Method"] = endpoint
 	}
 
 	// no endpoint then set to method
 	if len(endpoint) == 0 {
-		msg.Header[headers.Endpoint] = method
+		msg.Header["Micro-Endpoint"] = method
 	}
 
 	return nil
 }
 
-func newRPCCodec(req *transport.Message, socket transport.Socket, c codec.NewCodec) codec.Codec {
+func newRpcCodec(req *transport.Message, socket transport.Socket, c codec.NewCodec) codec.Codec {
 	rwc := &readWriteCloser{
 		rbuf: bufferPool.Get(),
 		wbuf: bufferPool.Get(),
@@ -194,6 +185,7 @@ func newRPCCodec(req *transport.Message, socket transport.Socket, c codec.NewCod
 	case "grpc":
 		// write the body
 		rwc.rbuf.Write(req.Body)
+		// set the protocol
 		r.protocol = "grpc"
 	default:
 		// first is not preloaded
@@ -205,7 +197,7 @@ func newRPCCodec(req *transport.Message, socket transport.Socket, c codec.NewCod
 
 func (c *rpcCodec) ReadHeader(r *codec.Message, t codec.MessageType) error {
 	// the initial message
-	mmsg := codec.Message{
+	m := codec.Message{
 		Header: c.req.Header,
 		Body:   c.req.Body,
 	}
@@ -229,9 +221,9 @@ func (c *rpcCodec) ReadHeader(r *codec.Message, t codec.MessageType) error {
 		}
 
 		// set the message header
-		mmsg.Header = tm.Header
+		m.Header = tm.Header
 		// set the message body
-		mmsg.Body = tm.Body
+		m.Body = tm.Body
 
 		// set req
 		c.req = &tm
@@ -256,20 +248,20 @@ func (c *rpcCodec) ReadHeader(r *codec.Message, t codec.MessageType) error {
 	}
 
 	// set some internal things
-	getHeaders(&mmsg)
+	getHeaders(&m)
 
 	// read header via codec
-	if err := c.codec.ReadHeader(&mmsg, codec.Request); err != nil {
+	if err := c.codec.ReadHeader(&m, codec.Request); err != nil {
 		return err
 	}
 
 	// fallback for 0.14 and older
-	if len(mmsg.Endpoint) == 0 {
-		mmsg.Endpoint = mmsg.Method
+	if len(m.Endpoint) == 0 {
+		m.Endpoint = m.Method
 	}
 
 	// set message
-	*r = mmsg
+	*r = m
 
 	return nil
 }
@@ -323,7 +315,7 @@ func (c *rpcCodec) Write(r *codec.Message, b interface{}) error {
 
 		// write an error if it failed
 		m.Error = errors.Wrapf(err, "Unable to encode body").Error()
-		m.Header[headers.Error] = m.Error
+		m.Header["Micro-Error"] = m.Error
 		// no body to write
 		if err := c.codec.Write(m, nil); err != nil {
 			return err

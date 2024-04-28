@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go-micro.dev/v4/config/loader"
@@ -17,39 +16,34 @@ import (
 )
 
 type memory struct {
-	// the current values
-	vals reader.Values
 	exit chan bool
+	opts loader.Options
+
+	sync.RWMutex
 	// the current snapshot
 	snap *loader.Snapshot
-
-	watchers *list.List
-	opts     loader.Options
-
+	// the current values
+	vals reader.Values
 	// all the sets
 	sets []*source.ChangeSet
 	// all the sources
 	sources []source.Source
 
-	sync.RWMutex
+	watchers *list.List
 }
 
 type updateValue struct {
-	value   reader.Value
 	version string
+	value   reader.Value
 }
 
 type watcher struct {
+	exit    chan bool
+	path    []string
 	value   reader.Value
 	reader  reader.Reader
-	version atomic.Value
-	exit    chan bool
+	version string
 	updates chan updateValue
-	path    []string
-}
-
-func (w *watcher) getVersion() string {
-	return w.version.Load().(string)
 }
 
 func (m *memory) watch(idx int, s source.Source) {
@@ -134,7 +128,7 @@ func (m *memory) loaded() bool {
 	return loaded
 }
 
-// reload reads the sets and creates new values.
+// reload reads the sets and creates new values
 func (m *memory) reload() error {
 	m.Lock()
 
@@ -175,7 +169,7 @@ func (m *memory) update() {
 	m.RUnlock()
 
 	for _, w := range watchers {
-		if w.getVersion() >= snap.Version {
+		if w.version >= snap.Version {
 			continue
 		}
 
@@ -191,7 +185,7 @@ func (m *memory) update() {
 	}
 }
 
-// Snapshot returns a snapshot of the current loaded config.
+// Snapshot returns a snapshot of the current loaded config
 func (m *memory) Snapshot() (*loader.Snapshot, error) {
 	if m.loaded() {
 		m.RLock()
@@ -213,7 +207,7 @@ func (m *memory) Snapshot() (*loader.Snapshot, error) {
 	return snap, nil
 }
 
-// Sync loads all the sources, calls the parser and updates the config.
+// Sync loads all the sources, calls the parser and updates the config
 func (m *memory) Sync() error {
 	//nolint:prealloc
 	var sets []*source.ChangeSet
@@ -363,8 +357,8 @@ func (m *memory) Watch(path ...string) (loader.Watcher, error) {
 		value:   value,
 		reader:  m.opts.Reader,
 		updates: make(chan updateValue, 1),
+		version: m.snap.Version,
 	}
-	w.version.Store(m.snap.Version)
 
 	e := m.watchers.PushBack(w)
 
@@ -398,8 +392,9 @@ func (w *watcher) Next() (*loader.Snapshot, error) {
 
 		return &loader.Snapshot{
 			ChangeSet: cs,
-			Version:   w.getVersion(),
+			Version:   w.version,
 		}
+
 	}
 
 	for {
@@ -408,13 +403,13 @@ func (w *watcher) Next() (*loader.Snapshot, error) {
 			return nil, errors.New("watcher stopped")
 
 		case uv := <-w.updates:
-			if uv.version <= w.getVersion() {
+			if uv.version <= w.version {
 				continue
 			}
 
 			v := uv.value
 
-			w.version.Store(uv.version)
+			w.version = uv.version
 
 			if bytes.Equal(w.value.Bytes(), v.Bytes()) {
 				continue

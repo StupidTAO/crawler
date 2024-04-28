@@ -7,11 +7,11 @@ import (
 )
 
 var (
-	// ErrWatcherStopped is returned when source watcher has been stopped.
+	// ErrWatcherStopped is returned when source watcher has been stopped
 	ErrWatcherStopped = errors.New("watcher stopped")
 )
 
-// Source is the source from which config is loaded.
+// Source is the source from which config is loaded
 type Source interface {
 	Read() (*ChangeSet, error)
 	Write(*ChangeSet) error
@@ -19,16 +19,16 @@ type Source interface {
 	String() string
 }
 
-// ChangeSet represents a set of changes from a source.
+// ChangeSet represents a set of changes from a source
 type ChangeSet struct {
-	Timestamp time.Time
+	Data      []byte
 	Checksum  string
 	Format    string
 	Source    string
-	Data      []byte
+	Timestamp time.Time
 }
 
-// Watcher watches a source for changes.
+// Watcher watches a source for changes
 type Watcher interface {
 	Next() (*ChangeSet, error)
 	Stop() error

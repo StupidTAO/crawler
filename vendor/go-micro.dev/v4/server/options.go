@@ -20,7 +20,7 @@ type RouterOptions struct {
 
 type RouterOption func(o *RouterOptions)
 
-func NewRouterOptions(opt ...RouterOption) RouterOptions {
+func newRouterOptions(opt ...RouterOption) RouterOptions {
 	opts := RouterOptions{
 		Logger: logger.DefaultLogger,
 	}
@@ -32,7 +32,7 @@ func NewRouterOptions(opt ...RouterOption) RouterOptions {
 	return opts
 }
 
-// WithRouterLogger sets the underline router logger.
+// WithRouterLogger sets the underline router logger
 func WithRouterLogger(l logger.Logger) RouterOption {
 	return func(o *RouterOptions) {
 		o.Logger = l
@@ -40,45 +40,41 @@ func WithRouterLogger(l logger.Logger) RouterOption {
 }
 
 type Options struct {
-	Logger logger.Logger
+	Codecs        map[string]codec.NewCodec
+	Broker        broker.Broker
+	Registry      registry.Registry
+	Tracer        trace.Tracer
+	Transport     transport.Transport
+	Metadata      map[string]string
+	Name          string
+	Address       string
+	Advertise     string
+	Id            string
+	Version       string
+	HdlrWrappers  []HandlerWrapper
+	SubWrappers   []SubscriberWrapper
+	ListenOptions []transport.ListenOption
+	Logger        logger.Logger
 
-	Broker    broker.Broker
-	Registry  registry.Registry
-	Tracer    trace.Tracer
-	Transport transport.Transport
-
-	// Other options for implementations of the interface
-	// can be stored in a context
-	Context context.Context
+	// RegisterCheck runs a check function before registering the service
+	RegisterCheck func(context.Context) error
+	// The register expiry time
+	RegisterTTL time.Duration
+	// The interval on which to register
+	RegisterInterval time.Duration
 
 	// The router for requests
 	Router Router
 
-	// RegisterCheck runs a check function before registering the service
-	RegisterCheck func(context.Context) error
-	Metadata      map[string]string
-
 	// TLSConfig specifies tls.Config for secure serving
 	TLSConfig *tls.Config
 
-	Codecs        map[string]codec.NewCodec
-	Name          string
-	Id            string
-	Version       string
-	Advertise     string
-	Address       string
-	HdlrWrappers  []HandlerWrapper
-	ListenOptions []transport.ListenOption
-	SubWrappers   []SubscriberWrapper
-	// The interval on which to register
-	RegisterInterval time.Duration
-
-	// The register expiry time
-	RegisterTTL time.Duration
+	// Other options for implementations of the interface
+	// can be stored in a context
+	Context context.Context
 }
 
-// NewOptions creates new server options.
-func NewOptions(opt ...Option) Options {
+func newOptions(opt ...Option) Options {
 	opts := Options{
 		Codecs:           make(map[string]codec.NewCodec),
 		Metadata:         map[string]string{},
@@ -126,49 +122,49 @@ func NewOptions(opt ...Option) Options {
 	return opts
 }
 
-// Server name.
+// Server name
 func Name(n string) Option {
 	return func(o *Options) {
 		o.Name = n
 	}
 }
 
-// Unique server id.
+// Unique server id
 func Id(id string) Option {
 	return func(o *Options) {
 		o.Id = id
 	}
 }
 
-// Version of the service.
+// Version of the service
 func Version(v string) Option {
 	return func(o *Options) {
 		o.Version = v
 	}
 }
 
-// Address to bind to - host:port.
+// Address to bind to - host:port
 func Address(a string) Option {
 	return func(o *Options) {
 		o.Address = a
 	}
 }
 
-// The address to advertise for discovery - host:port.
+// The address to advertise for discovery - host:port
 func Advertise(a string) Option {
 	return func(o *Options) {
 		o.Advertise = a
 	}
 }
 
-// Broker to use for pub/sub.
+// Broker to use for pub/sub
 func Broker(b broker.Broker) Option {
 	return func(o *Options) {
 		o.Broker = b
 	}
 }
 
-// Codec to use to encode/decode requests for a given content type.
+// Codec to use to encode/decode requests for a given content type
 func Codec(contentType string, c codec.NewCodec) Option {
 	return func(o *Options) {
 		o.Codecs[contentType] = c
@@ -184,56 +180,56 @@ func Context(ctx context.Context) Option {
 	}
 }
 
-// Registry used for discovery.
+// Registry used for discovery
 func Registry(r registry.Registry) Option {
 	return func(o *Options) {
 		o.Registry = r
 	}
 }
 
-// Tracer mechanism for distributed tracking.
+// Tracer mechanism for distributed tracking
 func Tracer(t trace.Tracer) Option {
 	return func(o *Options) {
 		o.Tracer = t
 	}
 }
 
-// Transport mechanism for communication e.g http, rabbitmq, etc.
+// Transport mechanism for communication e.g http, rabbitmq, etc
 func Transport(t transport.Transport) Option {
 	return func(o *Options) {
 		o.Transport = t
 	}
 }
 
-// Metadata associated with the server.
+// Metadata associated with the server
 func Metadata(md map[string]string) Option {
 	return func(o *Options) {
 		o.Metadata = md
 	}
 }
 
-// RegisterCheck run func before registry service.
+// RegisterCheck run func before registry service
 func RegisterCheck(fn func(context.Context) error) Option {
 	return func(o *Options) {
 		o.RegisterCheck = fn
 	}
 }
 
-// Register the service with a TTL.
+// Register the service with a TTL
 func RegisterTTL(t time.Duration) Option {
 	return func(o *Options) {
 		o.RegisterTTL = t
 	}
 }
 
-// Register the service with at interval.
+// Register the service with at interval
 func RegisterInterval(t time.Duration) Option {
 	return func(o *Options) {
 		o.RegisterInterval = t
 	}
 }
 
-// TLSConfig specifies a *tls.Config.
+// TLSConfig specifies a *tls.Config
 func TLSConfig(t *tls.Config) Option {
 	return func(o *Options) {
 		// set the internal tls
@@ -253,14 +249,14 @@ func TLSConfig(t *tls.Config) Option {
 	}
 }
 
-// WithRouter sets the request router.
+// WithRouter sets the request router
 func WithRouter(r Router) Option {
 	return func(o *Options) {
 		o.Router = r
 	}
 }
 
-// WithLogger sets the underline logger.
+// WithLogger sets the underline logger
 func WithLogger(l logger.Logger) Option {
 	return func(o *Options) {
 		o.Logger = l
@@ -279,18 +275,18 @@ func Wait(wg *sync.WaitGroup) Option {
 		if wg == nil {
 			wg = new(sync.WaitGroup)
 		}
-		o.Context = context.WithValue(o.Context, wgKey{}, wg)
+		o.Context = context.WithValue(o.Context, "wait", wg)
 	}
 }
 
-// Adds a handler Wrapper to a list of options passed into the server.
+// Adds a handler Wrapper to a list of options passed into the server
 func WrapHandler(w HandlerWrapper) Option {
 	return func(o *Options) {
 		o.HdlrWrappers = append(o.HdlrWrappers, w)
 	}
 }
 
-// Adds a subscriber Wrapper to a list of options passed into the server.
+// Adds a subscriber Wrapper to a list of options passed into the server
 func WrapSubscriber(w SubscriberWrapper) Option {
 	return func(o *Options) {
 		o.SubWrappers = append(o.SubWrappers, w)
@@ -298,7 +294,7 @@ func WrapSubscriber(w SubscriberWrapper) Option {
 }
 
 // Add transport.ListenOption to the ListenOptions list, when using it, it will be passed to the
-// httpTransport.Listen() method.
+// httpTransport.Listen() method
 func ListenOption(option transport.ListenOption) Option {
 	return func(o *Options) {
 		o.ListenOptions = append(o.ListenOptions, option)

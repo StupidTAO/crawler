@@ -16,13 +16,13 @@ import (
 var (
 	// ErrInvalidParam is returned when invalid data is provided to the ToJSON or Unmarshal function.
 	// Specifically, this will be returned when there is no equals sign present in the URL query parameter.
-	ErrInvalidParam = errors.New("qson: invalid url query param provided")
+	ErrInvalidParam error = errors.New("qson: invalid url query param provided")
 
 	bracketSplitter *regexp.Regexp
 )
 
 func init() {
-	bracketSplitter = regexp.MustCompile(`\[|\]`)
+	bracketSplitter = regexp.MustCompile("\\[|\\]")
 }
 
 // Unmarshal will take a dest along with URL
@@ -41,7 +41,6 @@ func Unmarshal(dst interface{}, query string) error {
 	if err != nil {
 		return err
 	}
-
 	return json.Unmarshal(b, dst)
 }
 
@@ -57,18 +56,14 @@ func ToJSON(query string) ([]byte, error) {
 	var (
 		builder interface{} = make(map[string]interface{})
 	)
-
 	params := strings.Split(query, "&")
-
 	for _, part := range params {
 		tempMap, err := queryToMap(part)
 		if err != nil {
 			return nil, err
 		}
-
 		builder = merge(builder, tempMap)
 	}
-
 	return json.Marshal(builder)
 }
 
@@ -86,12 +81,10 @@ func queryToMap(param string) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	rawValue, err = url.QueryUnescape(rawValue)
 	if err != nil {
 		return nil, err
 	}
-
 	rawKey, err = url.QueryUnescape(rawKey)
 	if err != nil {
 		return nil, err
@@ -115,7 +108,6 @@ func queryToMap(param string) (map[string]interface{}, error) {
 				return nil, err
 			}
 		}
-
 		return map[string]interface{}{
 			key: value,
 		}, nil
@@ -128,7 +120,6 @@ func queryToMap(param string) (map[string]interface{}, error) {
 	// and then we set {"a": queryToMap("b[c]", value)}
 	ret := make(map[string]interface{}, 0)
 	ret[key], err = queryToMap(buildNewKey(rawKey) + "=" + rawValue)
-
 	if err != nil {
 		return nil, err
 	}
@@ -141,19 +132,17 @@ func queryToMap(param string) (map[string]interface{}, error) {
 		temp := ret[key].(map[string]interface{})
 		ret[key] = []interface{}{temp[""]}
 	}
-
 	return ret, nil
 }
 
 // buildNewKey will take something like:
 // origKey = "bar[one][two]"
 // pieces = [bar one two ]
-// and return "one[two]".
+// and return "one[two]"
 func buildNewKey(origKey string) string {
 	pieces := bracketSplitter.Split(origKey, -1)
 	ret := origKey[len(pieces[0])+1:]
 	ret = ret[:len(pieces[1])] + ret[len(pieces[1])+1:]
-
 	return ret
 }
 
@@ -165,6 +154,5 @@ func splitKeyAndValue(param string) (string, string, error) {
 	if li == -1 {
 		return "", "", ErrInvalidParam
 	}
-
 	return param[:li], param[li+1:], nil
 }

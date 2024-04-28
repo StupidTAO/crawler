@@ -6,14 +6,14 @@ import (
 	"go-micro.dev/v4/registry"
 )
 
-type RpcHandler struct {
-	handler   interface{}
-	opts      HandlerOptions
+type rpcHandler struct {
 	name      string
+	handler   interface{}
 	endpoints []*registry.Endpoint
+	opts      HandlerOptions
 }
 
-func NewRpcHandler(handler interface{}, opts ...HandlerOption) Handler {
+func newRpcHandler(handler interface{}, opts ...HandlerOption) Handler {
 	options := HandlerOptions{
 		Metadata: make(map[string]map[string]string),
 	}
@@ -40,7 +40,7 @@ func NewRpcHandler(handler interface{}, opts ...HandlerOption) Handler {
 		}
 	}
 
-	return &RpcHandler{
+	return &rpcHandler{
 		name:      name,
 		handler:   handler,
 		endpoints: endpoints,
@@ -48,18 +48,18 @@ func NewRpcHandler(handler interface{}, opts ...HandlerOption) Handler {
 	}
 }
 
-func (r *RpcHandler) Name() string {
+func (r *rpcHandler) Name() string {
 	return r.name
 }
 
-func (r *RpcHandler) Handler() interface{} {
+func (r *rpcHandler) Handler() interface{} {
 	return r.handler
 }
 
-func (r *RpcHandler) Endpoints() []*registry.Endpoint {
+func (r *rpcHandler) Endpoints() []*registry.Endpoint {
 	return r.endpoints
 }
 
-func (r *RpcHandler) Options() HandlerOptions {
+func (r *rpcHandler) Options() HandlerOptions {
 	return r.opts
 }

@@ -1,12 +1,17 @@
 package engine
 
 import (
+	"context"
+	"fmt"
+	"github.com/StupidTAO/crawler/master"
 	"github.com/StupidTAO/crawler/parse/doubanbook"
 	"github.com/StupidTAO/crawler/parse/doubangroup"
 	"github.com/StupidTAO/crawler/parse/doubangroupjs"
 	"github.com/StupidTAO/crawler/spider"
 	"github.com/robertkrimen/otto"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
+	"strings"
 	"sync"
 )
 
@@ -102,9 +107,13 @@ func (c *CrawlerStore) AddJSTask(m *spider.TaskModle) {
 		task.Rule.Trunk[r.Name] = &spider.Rule{
 			ParseFunc: parseFunc,
 		}
-		c.hash[task.Name] = task
-		c.list = append(c.list, task)
 	}
+	if task.Name == "" {
+		fmt.Println("AddJSTask() task.Name = ", task.Name)
+		return
+	}
+	c.hash[task.Name] = task
+	c.list = append(c.list, task)
 }
 
 // 全局蜘蛛种类实例
@@ -123,12 +132,19 @@ type CrawlerStore struct {
 }
 
 type Crawler struct {
-	out         chan spider.ParseResult
+	id  string
+	out chan spider.ParseResult
+
 	Visited     map[string]bool
 	VisitedLock sync.Mutex
 
 	failures    map[string]*spider.Request //失败请求id -> 失败请求
 	failureLock sync.Mutex
+
+	resources map[string]*master.ResourceSpec
+	rlock     sync.Mutex
+
+	etcdCli *clientv3.Client
 	options
 }
 
@@ -147,7 +163,7 @@ type Schedule struct {
 }
 
 // 函数式选项模式
-func NewEngine(opts ...Option) *Crawler {
+func NewEngine(opts ...Option) (*Crawler, error) {
 	options := defaultOptions
 	for _, opt := range opts {
 		opt(&options)
@@ -157,7 +173,21 @@ func NewEngine(opts ...Option) *Crawler {
 	e.out = make(chan spider.ParseResult)
 	e.failures = make(map[string]*spider.Request)
 	e.options = options
-	return e
+
+	//任务加上默认的采集器与存储器
+	for _, task := range Store.list {
+		task.Fetcher = e.Fetcher
+		task.Storage = e.Storage
+	}
+
+	endpoints := []string{e.registryURL}
+	cli, err := clientv3.New(clientv3.Config{Endpoints: endpoints})
+	if err != nil {
+		return nil, err
+	}
+	e.etcdCli = cli
+
+	return e, nil
 }
 
 func NewSchedule() *Schedule {
@@ -169,7 +199,14 @@ func NewSchedule() *Schedule {
 	return s
 }
 
-func (e *Crawler) Run() {
+func (e *Crawler) Run(id string, cluster bool) {
+	e.id = id
+	if !cluster {
+		e.handleSeeds()
+	}
+
+	go e.loadResource()
+	go e.watchResource()
 	go e.Schedule()
 	for i := 0; i < e.WorkCount; i++ {
 		go e.CreateWork()
@@ -225,6 +262,10 @@ func (s *Schedule) Schedule() {
 }
 
 func (e *Crawler) Schedule() {
+	go e.scheduler.Schedule()
+}
+
+func (e *Crawler) handleSeeds() {
 	var reqs []*spider.Request
 	for _, task := range e.Seeds {
 		t, ok := Store.hash[task.Name]
@@ -247,8 +288,7 @@ func (e *Crawler) Schedule() {
 
 		reqs = append(reqs, rootreqs...)
 	}
-
-	go e.scheduler.Schedule()
+	fmt.Println("handleSeeds() len(reqs) = ", len(reqs))
 	go e.scheduler.Push(reqs...)
 }
 
@@ -275,6 +315,8 @@ func (e *Crawler) CreateWork() {
 		}
 
 		e.StoreVisited(req)
+		fmt.Println("CreateWork() req.Task.Name = ", req.Task.Name)
+		fmt.Println("CreateWork() req = ", req)
 
 		body, err := req.Fetch()
 		if err != nil {
@@ -357,4 +399,99 @@ func (e *Crawler) SetFailure(req *spider.Request) {
 		e.Logger.Debug("SetFailure() set failure req once!")
 	}
 	//todo: 失败两次，加载到失败队列中
+}
+
+func (c *Crawler) watchResource() {
+	watch := c.etcdCli.Watch(context.Background(), master.RESOURCEPATH, clientv3.WithPrefix())
+	for w := range watch {
+		if w.Err() != nil {
+			c.Logger.Error("watch resource failed", zap.Error(w.Err()))
+			continue
+		}
+		if w.Canceled {
+			c.Logger.Error("watch resource canceled")
+			return
+		}
+		for _, ev := range w.Events {
+			spec, err := master.Decode(ev.Kv.Value)
+			if err != nil || spec == nil {
+				c.Logger.Error("decode etcd value failed", zap.Error(err))
+				continue
+			}
+
+			switch ev.Type {
+			case clientv3.EventTypePut:
+				if ev.IsCreate() {
+					c.Logger.Info("receive create resource", zap.Any("spec", spec))
+
+				} else if ev.IsModify() {
+					c.Logger.Info("receive update resource", zap.Any("spec", spec))
+				}
+				c.runTasks(spec.Name)
+			case clientv3.EventTypeDelete:
+				c.Logger.Info("receive delete resource", zap.Any("spec", spec))
+			}
+		}
+	}
+}
+
+func getID(assignedNode string) string {
+	s := strings.Split(assignedNode, "|")
+	if len(s) < 2 {
+		return ""
+	}
+	return s[0]
+}
+
+func (c *Crawler) loadResource() error {
+	resp, err := c.etcdCli.Get(context.Background(), master.RESOURCEPATH, clientv3.WithPrefix(), clientv3.WithSerializable())
+	if err != nil {
+		return fmt.Errorf("etcd get failed")
+	}
+
+	resources := make(map[string]*master.ResourceSpec)
+	for _, kv := range resp.Kvs {
+		r, err := master.Decode(kv.Value)
+		if err == nil && r != nil {
+			id := getID(r.AssignedNode)
+			if len(id) > 0 && c.id == id {
+				resources[r.Name] = r
+			}
+		}
+	}
+	c.Logger.Info("leader init load resource", zap.Int("lenth", len(resources)))
+	c.Logger.Info("leader init load resource", zap.Any("resources", resources))
+	c.rlock.Lock()
+	defer c.rlock.Unlock()
+	c.resources = resources
+	for _, r := range c.resources {
+		c.runTasks(r.Name)
+	}
+
+	return nil
+}
+
+func (c *Crawler) runTasks(taskName string) {
+	if len(taskName) == 0 {
+		c.Logger.Error("can not find preset tasks", zap.Int("len(taskName)", len(taskName)))
+		return
+	}
+	t, ok := Store.hash[taskName]
+	if !ok {
+		c.Logger.Error("can not find preset tasks", zap.String("task name", taskName))
+		return
+	}
+	res, err := t.Rule.Root()
+
+	if err != nil {
+		c.Logger.Error("get root failed",
+			zap.Error(err),
+		)
+		return
+	}
+
+	for _, req := range res {
+		req.Task = t
+	}
+	c.scheduler.Push(res...)
 }

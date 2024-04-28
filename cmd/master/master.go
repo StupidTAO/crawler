@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	RESOURCEPATH = "/resources"
+	RESOURCEPATH = "/resource"
 
 	ADDRESOURCE = iota
 	DELETERESOURCE
@@ -106,9 +106,6 @@ func Run() {
 
 	// set zap global logger
 	zap.ReplaceGlobals(logger)
-
-	//
-	fmt.Println("hello master")
 
 	var sconfig ServerConfig
 	if err := cfg.Get("MasterServer").Scan(&sconfig); err != nil {
