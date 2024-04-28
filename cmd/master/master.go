@@ -12,7 +12,10 @@ import (
 	"github.com/go-micro/plugins/v4/config/encoder/toml"
 	etcdReg "github.com/go-micro/plugins/v4/registry/etcd"
 	gs "github.com/go-micro/plugins/v4/server/grpc"
+	"github.com/go-micro/plugins/v4/wrapper/breaker/hystrix"
+	ratePlugin "github.com/go-micro/plugins/v4/wrapper/ratelimiter/ratelimit"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/juju/ratelimit"
 	"github.com/spf13/cobra"
 	"go-micro.dev/v4"
 	"go-micro.dev/v4/client"
@@ -46,9 +49,6 @@ var MasterCmd = &cobra.Command{
 	Long:  "run master service.",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("master id = ", masterID)
-		fmt.Println("http address = ", HTTPListenAddress)
-		fmt.Println("grpc address = ", GRPCListenAddress)
 		Run()
 	},
 }
@@ -123,7 +123,7 @@ func Run() {
 		return
 	}
 	seeds := worker.ParseTaskConfig(logger, nil, nil, tcfg)
-
+	fmt.Println("len (seed) is : ", len(seeds))
 	m, err := master.New(
 		masterID,
 		master.WithLogger(logger.Named("master")),
@@ -153,6 +153,8 @@ type ServerConfig struct {
 }
 
 func RunGRPCServer(MasterService *master.Master, logger *zap.Logger, reg registry.Registry, cfg ServerConfig) {
+	b := ratelimit.NewBucketWithRate(0.5, 1)
+
 	service := micro.NewService(
 		micro.Server(gs.NewServer(
 			server.Id(masterID),
@@ -164,7 +166,17 @@ func RunGRPCServer(MasterService *master.Master, logger *zap.Logger, reg registr
 		micro.WrapHandler(logWrapper(logger)),
 		micro.Name(cfg.Name),
 		micro.Client(grpccli.NewClient()),
+		micro.WrapHandler(ratePlugin.NewHandlerWrapper(b, false)),
+		micro.WrapClient(hystrix.NewClientWrapper()),
 	)
+
+	hystrix.ConfigureCommand("go.micro.server.master.CrawlerMaster.AddResource", hystrix.CommandConfig{
+		Timeout:                10000,
+		MaxConcurrentRequests:  100,
+		RequestVolumeThreshold: 10,
+		SleepWindow:            6000,
+		ErrorPercentThreshold:  30,
+	})
 
 	cli := crawler.NewCrawlerMasterService(cfg.Name, service.Client())
 	MasterService.SetForwardCli(cli)
@@ -214,6 +226,7 @@ func logWrapper(log *zap.Logger) server.HandlerWrapper {
 				zap.String("method", req.Method()),
 				zap.String("Service", req.Service()),
 				zap.Reflect("request param:", req.Body()),
+				zap.String("Endpoint", req.Endpoint()),
 			)
 
 			err := fn(ctx, req, rsp)

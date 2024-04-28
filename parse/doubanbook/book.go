@@ -2,7 +2,6 @@ package doubanbook
 
 import (
 	"errors"
-	"fmt"
 	"github.com/StupidTAO/crawler/limiter"
 	"github.com/StupidTAO/crawler/spider"
 	"go.uber.org/zap"
@@ -78,9 +77,7 @@ func ParseTag(ctx *spider.Context) (spider.ParseResult, error) {
 		return result, errors.New("matched content is zero!")
 	}
 
-	fmt.Println("ParseTag() len(result.Requests) ", len(result.Requests))
-	fmt.Println("ParseTag() result.Requests[0] ", result.Requests[0])
-
+	zap.S().Debugln("parse book tag,count:", len(result.Requests), "url:", ctx.Req.URL)
 	return result, nil
 }
 

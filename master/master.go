@@ -347,7 +347,7 @@ func (m *Master) AddSeed() {
 }
 
 func (m *Master) loadResource() error {
-	resp, err := m.etcdCli.Get(context.Background(), RESOURCEPATH, clientv3.WithSerializable(), clientv3.WithSerializable())
+	resp, err := m.etcdCli.Get(context.Background(), RESOURCEPATH, clientv3.WithPrefix(), clientv3.WithSerializable())
 	if err != nil {
 		return errors.New("etcd get failed")
 	}
@@ -380,6 +380,7 @@ func (m *Master) loadResource() error {
 }
 
 func (m *Master) DeleteResource(ctx context.Context, spec *proto.ResourceSpec, empty *empty.Empty) error {
+	fmt.Println("DeleteResource() before spec.Name = ", spec.Name)
 	if !m.IsLeader() && m.leaderID != "" && m.leaderID != m.ID {
 		addr := getLeaderAddress(m.leaderID)
 		_, err := m.forwardCli.DeleteResource(ctx, spec, client.WithAddress(addr))
