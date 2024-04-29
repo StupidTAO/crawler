@@ -47,7 +47,6 @@ type BrowserFetch struct {
 
 // 模拟浏览器访问
 func (b BrowserFetch) Get(request *spider.Request) ([]byte, error) {
-	fmt.Println("Get() before")
 	client := &http.Client{
 		Timeout: b.Timeout,
 	}
@@ -70,9 +69,7 @@ func (b BrowserFetch) Get(request *spider.Request) ([]byte, error) {
 
 	req.Header.Set("User-Agent", extensions.GenerateRandomUA())
 
-	fmt.Println("Get() before 1")
 	resp, err := client.Do(req)
-	fmt.Println("Get() after")
 	if err != nil {
 		return nil, err
 	}

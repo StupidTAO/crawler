@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/StupidTAO/crawler/master"
 	"github.com/StupidTAO/crawler/parse/doubanbook"
@@ -11,6 +12,7 @@ import (
 	"github.com/robertkrimen/otto"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
+	"net"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -301,7 +303,7 @@ func (e *Crawler) handleSeeds() {
 
 		reqs = append(reqs, rootreqs...)
 	}
-	fmt.Println("handleSeeds() len(reqs) = ", len(reqs))
+
 	go e.scheduler.Push(reqs...)
 }
 
@@ -328,8 +330,7 @@ func (e *Crawler) CreateWork() {
 		}
 
 		e.StoreVisited(req)
-		fmt.Println("CreateWork() req.Task.Name = ", req.Task.Name)
-		fmt.Println("CreateWork() req = ", req)
+		e.Logger.Debug("CreateWork() ", zap.String("req.Task.Name = ", req.Task.Name))
 
 		body, err := req.Fetch()
 		if err != nil {
@@ -425,14 +426,30 @@ func (c *Crawler) watchResource() {
 			c.Logger.Error("watch resource canceled")
 			return
 		}
+
 		for _, ev := range w.Events {
+			spec, err := master.Decode(ev.Kv.Value)
+			if err != nil || spec == nil {
+				c.Logger.Error("decode etcd value failed", zap.Error(err))
+				continue
+			}
+
+			//判断监听到的资源变化，是否分配给本worker（精确到workerId和ip地址）
+			ipv4, err := getLocalIP()
+			if err != nil {
+				c.Logger.Error("get local ip error", zap.Error(err))
+				continue
+			}
+			prefix := getLocalAssignedNode(c.id, ipv4)
+			if !strings.HasPrefix(spec.AssignedNode, prefix) {
+				c.Logger.Info("resource is not belong to this worker",
+					zap.String("parse AssignedNode", spec.AssignedNode),
+					zap.String("this worker AssignedNode", prefix))
+				continue
+			}
+
 			switch ev.Type {
 			case clientv3.EventTypePut:
-				spec, err := master.Decode(ev.Kv.Value)
-				if err != nil || spec == nil {
-					c.Logger.Error("decode etcd value failed", zap.Error(err))
-					continue
-				}
 				if ev.IsCreate() {
 					c.Logger.Info("receive create resource", zap.Any("spec", spec))
 
@@ -445,11 +462,6 @@ func (c *Crawler) watchResource() {
 				c.rlock.Unlock()
 
 			case clientv3.EventTypeDelete:
-				spec, err := master.Decode(ev.PrevKv.Value)
-				c.Logger.Info("receive delete resource", zap.Any("spec", spec))
-				if err != nil {
-					c.Logger.Error("decode etcd value failed", zap.Error(err))
-				}
 
 				c.rlock.Lock()
 				c.deleteTasks(spec.Name)
@@ -487,10 +499,11 @@ func (c *Crawler) loadResource() error {
 	c.Logger.Info("leader init load resource", zap.Any("resources", resources))
 	c.rlock.Lock()
 	defer c.rlock.Unlock()
-	c.resources = resources
+
 	for _, r := range resources {
 		c.runTasks(r.Name)
 	}
+	c.resources = resources
 
 	return nil
 }
@@ -516,6 +529,7 @@ func (c *Crawler) runTasks(taskName string) {
 		return
 	}
 
+	c.Logger.Debug("runTasks()", zap.String("taskName", taskName))
 	t, ok := Store.hash[taskName]
 	if !ok {
 		c.Logger.Error("can not find preset tasks", zap.String("task name", taskName))
@@ -535,4 +549,30 @@ func (c *Crawler) runTasks(taskName string) {
 		req.Task = t
 	}
 	c.scheduler.Push(res...)
+}
+
+// 获取本机网卡IP
+func getLocalIP() (string, error) {
+	var (
+		addrs []net.Addr
+		err   error
+	)
+	//获取所有网卡
+	if addrs, err = net.InterfaceAddrs(); err != nil {
+		return "", err
+	}
+	//取第一个非lo的网卡IP
+	for _, addr := range addrs {
+		if ipNet, isIpNet := addr.(*net.IPNet); isIpNet && !ipNet.IP.IsLoopback() {
+			if ipNet.IP.To4() != nil {
+				return ipNet.IP.String(), nil
+			}
+		}
+	}
+
+	return "", errors.New("no local ip")
+}
+
+func getLocalAssignedNode(id, ipv4 string) string {
+	return id + "|" + ipv4
 }

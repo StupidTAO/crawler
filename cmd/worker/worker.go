@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/StupidTAO/crawler/collect"
 	"github.com/StupidTAO/crawler/engine"
+	"github.com/StupidTAO/crawler/generator"
 	"github.com/StupidTAO/crawler/limiter"
 	"github.com/StupidTAO/crawler/log"
 	"github.com/StupidTAO/crawler/proto/greeter"
@@ -31,6 +32,7 @@ import (
 	grpc2 "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -41,26 +43,27 @@ var WorkerCmd = &cobra.Command{
 	Long:  "run worker service.",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("work id = ", workerID)
-		fmt.Println("http address = ", HTTPListenAddress)
-		fmt.Println("grpc address = ", GRPCListenAddress)
 		Run()
 	},
 }
 
 func init() {
 	WorkerCmd.Flags().StringVar(
-		&workerID, "id", "1", "set master id")
+		&workerID, "id", "", "set worker id")
+
 	WorkerCmd.Flags().StringVar(
 		&HTTPListenAddress, "http", ":8080", "set HTTP listen address")
 
 	WorkerCmd.Flags().StringVar(
 		&GRPCListenAddress, "grpc", ":9090", "set GRPC listen address")
 
-	//WorkerCmd.Flags().StringVar(
-	//	&PProfListenAddress, "pprof", "9981", "set pprof listen address")
+	WorkerCmd.Flags().StringVar(
+		&PProfListenAddress, "pprof", ":9981", "set pprof address")
 
 	WorkerCmd.Flags().BoolVar(&cluster, "cluster", true, "run mode")
+
+	WorkerCmd.Flags().StringVar(
+		&podIP, "podip", "", "set worker ip")
 }
 
 var cluster bool
@@ -68,13 +71,14 @@ var workerID string
 var HTTPListenAddress string
 var GRPCListenAddress string
 var PProfListenAddress string
+var podIP string
 
 func Run() {
-	go func() {
-		if err := http.ListenAndServe(PProfListenAddress, nil); err != nil {
-			panic(err)
-		}
-	}()
+	//go func() {
+	//	if err := http.ListenAndServe(PProfListenAddress, nil); err != nil {
+	//		panic(err)
+	//	}
+	//}()
 
 	var (
 		err     error
@@ -165,7 +169,17 @@ func Run() {
 		panic(err)
 	}
 
+	if workerID == "" {
+		if podIP != "" {
+			ip := generator.IDbyIP(podIP)
+			workerID = strconv.Itoa(int(ip))
+		} else {
+			workerID = fmt.Sprintf("%d", time.Now().UnixNano())
+		}
+	}
+
 	id := sconfig.Name + "-" + workerID
+	zap.S().Debug("worker id: ", id)
 	// worker start
 	go s.Run(id, cluster)
 

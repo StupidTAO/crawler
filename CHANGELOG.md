@@ -1,3 +1,9 @@
+## v0.4.2
+* 增加auth 中间件
+* 增加k8s yaml
+* k8s中根据podip生成分布式id
+* 增加docker-compose.yaml
+
 ## v0.3.7
 * master成为leader后加载资源
 * master添加初始的种子任务

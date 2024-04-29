@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/StupidTAO/crawler/cmd/worker"
+	"github.com/StupidTAO/crawler/generator"
 	"github.com/StupidTAO/crawler/log"
 	"github.com/StupidTAO/crawler/master"
 	"github.com/StupidTAO/crawler/proto/crawler"
@@ -31,6 +32,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -55,19 +57,25 @@ var MasterCmd = &cobra.Command{
 
 func init() {
 	MasterCmd.Flags().StringVar(
-		&masterID, "id", "1", "set master id")
+		&masterID, "id", "", "set master id")
 	MasterCmd.Flags().StringVar(
 		&HTTPListenAddress, "http", ":8081", "set HTTP listen address")
 	MasterCmd.Flags().StringVar(
 		&GRPCListenAddress, "grpc", ":9091", "set GRPC listen address")
 	MasterCmd.Flags().StringVar(
 		&PProfLlistenAddress, "pprof", ":9981", "set GRPC listen address")
+	MasterCmd.Flags().StringVar(
+		&cfgFile, "config", "config.toml", "set master id")
+	MasterCmd.Flags().StringVar(
+		&podIP, "podip", "", "set worker id")
 }
 
 var masterID string
 var HTTPListenAddress string
 var GRPCListenAddress string
 var PProfLlistenAddress string
+var cfgFile string
+var podIP string
 
 func Run() {
 	//start pprof
@@ -86,7 +94,7 @@ func Run() {
 	enc := toml.NewEncoder()
 	cfg, err := config.NewConfig(config.WithReader(json.NewReader(reader.WithEncoder(enc))))
 	err = cfg.Load(file.NewSource(
-		file.WithPath("config.toml"),
+		file.WithPath(cfgFile),
 		source.WithEncoder(enc),
 	))
 
@@ -123,7 +131,7 @@ func Run() {
 		return
 	}
 	seeds := worker.ParseTaskConfig(logger, nil, nil, tcfg)
-	fmt.Println("len (seed) is : ", len(seeds))
+	logger.Debug("", zap.Int("len (seed) is : ", len(seeds)))
 	m, err := master.New(
 		masterID,
 		master.WithLogger(logger.Named("master")),
@@ -154,6 +162,15 @@ type ServerConfig struct {
 
 func RunGRPCServer(MasterService *master.Master, logger *zap.Logger, reg registry.Registry, cfg ServerConfig) {
 	b := ratelimit.NewBucketWithRate(0.5, 1)
+	if masterID == "" {
+		if podIP != "" {
+			ip := generator.IDbyIP(podIP)
+			masterID = strconv.Itoa(int(ip))
+		} else {
+			masterID = fmt.Sprintf("%d", time.Now().UnixNano())
+		}
+	}
+	zap.S().Debugf("master id: ", masterID)
 
 	service := micro.NewService(
 		micro.Server(gs.NewServer(

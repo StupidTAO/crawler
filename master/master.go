@@ -92,6 +92,7 @@ func New(id string, opts ...Option) (*Master, error) {
 	m.logger.Sugar().Debugln("master_id: ", m.ID)
 
 	endpoints := []string{m.registryURL}
+	m.logger.Debug("New(id string, opts ...Option)", zap.String("endpoints", endpoints[0]))
 	cli, err := clientv3.New(clientv3.Config{Endpoints: endpoints})
 	if err != nil {
 		return nil, err
@@ -121,7 +122,7 @@ func (m *Master) Campaign() {
 	s, err := concurrency.NewSession(m.etcdCli, concurrency.WithTTL(5))
 	defer s.Close()
 	if err != nil {
-		fmt.Println("NewSession", "error", "err", err)
+		m.logger.Error("NewSession", zap.Error(err))
 		return
 	}
 
@@ -260,7 +261,7 @@ func (m *Master) AddResource(ctx context.Context, req *proto.ResourceSpec, resp 
 
 	m.rlock.Lock()
 	defer m.rlock.Unlock()
-	m.logger.Info("AddResource() ", zap.String("ResourceSpec name", req.Name))
+
 	nodeSpec, err := m.addResources(&ResourceSpec{Name: req.Name})
 	if nodeSpec != nil {
 		resp.Id = nodeSpec.Node.Id
@@ -300,7 +301,6 @@ func (m *Master) addResources(r *ResourceSpec) (*NodeSpec, error) {
 		return nil, err
 	}
 
-	fmt.Println("addResources(r *ResourceSpec) ResourcePath = ", getResourcePath(r.Name))
 	m.resources[r.Name] = r
 	ns.Payload++
 	return ns, nil
@@ -380,7 +380,6 @@ func (m *Master) loadResource() error {
 }
 
 func (m *Master) DeleteResource(ctx context.Context, spec *proto.ResourceSpec, empty *empty.Empty) error {
-	fmt.Println("DeleteResource() before spec.Name = ", spec.Name)
 	if !m.IsLeader() && m.leaderID != "" && m.leaderID != m.ID {
 		addr := getLeaderAddress(m.leaderID)
 		_, err := m.forwardCli.DeleteResource(ctx, spec, client.WithAddress(addr))
