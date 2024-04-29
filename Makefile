@@ -24,3 +24,6 @@ debug:
 
 lint:
 	golangci-lint run ./...
+
+docker-network:
+	docker network create --subnet=192.168.10.0/16 crawler_counter_net
